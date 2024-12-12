@@ -1,0 +1,59 @@
+[project]
+name = "psrutils"
+version = "0.0.1"
+description = "A collection of Python-based utilities to analyse PSRCHIVE archives."
+authors = [
+    { name = "Christopher Lee" },
+]
+license = { text = "MIT License" }
+readme = { file = "README.md", content-type = "text/markdown" }
+requires-python = ">= 3.9"
+dependencies = [
+    "click",
+    "matplotlib",
+    "numba",
+    "numpy",
+    "psrqpy",
+    "ruff",
+]
+
+[project.scripts]
+pu-plot = "psrutils.apps.plot:main"
+pu-rmsynth = "psrutils.apps.rmsynth:main"
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.ruff]
+line-length = 100
+indent-width = 4
+target-version = "py39"
+include = [
+    "pyproject.toml",
+    "src/psrutils/*.py",
+    "src/psrutils/apps/*.py",
+]
+
+[tool.ruff.lint]
+select = [
+    # pycodestyle
+    "E",
+    # Pyflakes
+    "F",
+    # flake8-bugbear
+    "B",
+    # isort
+    "I",
+]
+ignore = [
+    # Ignore unused imports
+    "F401",
+    # Ignore wildcard imports
+    "F403",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
