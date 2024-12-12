@@ -1,4 +1,5 @@
 import logging
+from typing import Tuple
 
 import click
 import numpy as np
@@ -24,8 +25,8 @@ def main(
     rotate: float,
     rmlim: float,
     rmres: float,
-    phi_plotlim: tuple,
-    phase_plotlim: tuple,
+    phi_plotlim: Tuple[float, float],
+    phase_plotlim: Tuple[float, float],
     stairs: bool,
     peaks: bool,
 ) -> None:
@@ -45,7 +46,7 @@ def main(
     logger.info("Plotting")
     cube.plot_fdf(
         plot_stairs=stairs,
-        plot_rm=peaks,
+        plot_peaks=peaks,
         phase_range=phase_plotlim,
         phi_range=phi_plotlim,
         logger=logger,
