@@ -24,10 +24,10 @@ def main(
 
     if plot_tvsp:
         click.echo("Plotting time vs phase")
-        cube.plot_time_phase()
+        psrutils.plotting.plot_time_phase(cube)
     if plot_fvsp:
         click.echo("Plotting frequency vs phase")
-        cube.plot_freq_phase()
+        psrutils.plotting.plot_freq_phase(cube)
     if plot_prof:
         click.echo("Plotting profile")
-        cube.plot_profile()
+        psrutils.plotting.plot_profile(cube)

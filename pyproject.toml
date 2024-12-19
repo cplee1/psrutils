@@ -15,6 +15,7 @@ dependencies = [
     "numpy",
     "psrqpy",
     "ruff",
+    "tqdm",
 ]
 
 [project.scripts]
