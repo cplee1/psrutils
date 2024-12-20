@@ -20,6 +20,7 @@ dependencies = [
 
 [project.scripts]
 pu-plot = "psrutils.apps.plot:main"
+pu-plot-grid = "psrutils.apps.plot_grid:main"
 pu-rmsynth = "psrutils.apps.rmsynth:main"
 
 [build-system]
