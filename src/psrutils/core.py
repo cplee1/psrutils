@@ -158,6 +158,19 @@ class StokesCube(object):
         tmp_archive.pscrunch()
         return tmp_archive.get_data()[0, 0, 0, :]
 
+    @property
+    def snr(self):
+        """Get the S/N of the integrated profile."""
+        tmp_archive = self._archive.clone()
+        tmp_archive.fscrunch()
+        tmp_archive.tscrunch()
+        tmp_archive.pscrunch()
+        prof = tmp_archive.get_Profile(0, 0, 0)
+        return prof.snr()
+
+    def bscrunch(self, factor: int):
+        self._archive.bscrunch_to_nbin(factor)
+
     @classmethod
     def from_psrchive(
         cls,
