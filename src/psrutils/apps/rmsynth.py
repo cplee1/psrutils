@@ -44,21 +44,46 @@ def main(
 
     logger.info("Running RM-Synthesis")
     rmsyn_result = psrutils.rm_synthesis(cube, phi, bootstrap_nsamp=nsamp, logger=logger)
-    fdf, rmsf, rm_samples, rm_prof_samples, rm_stats = rmsyn_result
+    fdf, rmsf, rm_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
     rm_phi_meas = np.mean(rm_samples, axis=1)
     rm_phi_unc = np.std(rm_samples, axis=1)
+    rm_phi_mean = np.average(rm_phi_meas, weights=rm_phi_unc)
     rm_prof_meas = np.mean(rm_prof_samples)
     rm_prof_unc = np.std(rm_prof_samples)
+    rm_scat_meas = np.mean(rm_scat_samples)
+    rm_scat_unc = np.std(rm_scat_samples)
 
-    psrutils.plotting.plot_rm_hist(rm_prof_samples, logger=logger)
+    with open(f"{cube.source}.csv", "w") as f:
+        f.write(
+            f"{cube.source},{rm_phi_mean:.4f},{rm_prof_meas:.4f},{rm_prof_unc:.4f},{rm_scat_meas:.4f},{rm_scat_unc:.4f}\n"
+        )
+
+    with open(f"{cube.source}_rm_phi.csv", "w") as f:
+        for meas, unc in zip(rm_phi_meas, rm_phi_unc):
+            f.write(f"{meas:.4f},{unc:.4f}\n")
+
+    psrutils.plotting.plot_rm_hist(
+        rm_prof_samples, f"{cube.source}_rm_prof_hist.png", logger=logger
+    )
+    psrutils.plotting.plot_rm_hist(
+        rm_scat_samples, f"{cube.source}_rm_scat_hist.png", logger=logger
+    )
+    psrutils.plotting.plot_rm_vs_phi(
+        rm_samples, savename=f"{cube.source}_rm_phi_boxplot.png", logger=logger
+    )
 
     logger.info("Running RM-CLEAN")
     rmcln_result = psrutils.rm_clean(phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, logger=logger)
     cln_fdf = rmcln_result[0]
-    signal = np.max(np.abs(cln_fdf), axis=1)
-    noise = np.std(np.real(rmcln_result[3]))
-    snr = signal / noise
-    mask = np.where(snr > 6, True, False)
+
+    # Mask method 1
+    # signal = np.max(np.abs(cln_fdf), axis=1)
+    # noise = np.std(np.real(rmcln_result[3]))
+    # snr = signal / noise
+    # mask = np.where(snr > 5, True, False)
+
+    # Mask method 2
+    mask = np.where(rm_phi_unc < 1, True, False)
 
     logger.info("Plotting")
     psrutils.plotting.plot_2d_fdf(
@@ -73,5 +98,6 @@ def main(
         plot_peaks=peaks,
         phase_range=phase_plotlim,
         phi_range=phi_plotlim,
+        savename=f"{cube.source}_fdf.png",
         logger=logger,
     )

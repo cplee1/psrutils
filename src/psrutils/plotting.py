@@ -4,10 +4,25 @@ from typing import Tuple
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
+from astropy.visualization import hist
 
 import psrutils
 
-__all__ = ["plot_profile", "plot_freq_phase", "plot_time_phase", "plot_2d_fdf", "plot_rm_hist"]
+__all__ = [
+    "plot_profile",
+    "plot_freq_phase",
+    "plot_time_phase",
+    "plot_2d_fdf",
+    "plot_rm_hist",
+    "plot_rm_vs_phi",
+]
+
+
+plt.rcParams["mathtext.fontset"] = "dejavuserif"
+plt.rcParams["text.usetex"] = True
+plt.rcParams["font.family"] = "serif"
+plt.rcParams["font.serif"] = "cm"
+plt.rcParams["font.size"] = 12
 
 
 def plot_profile(
@@ -278,7 +293,7 @@ def plot_2d_fdf(
             capsize=1,
         )
     ax_2dfdf.set_xlabel("Pulse Phase [rot]")
-    ax_2dfdf.set_ylabel("$\phi$ [$\mathrm{rad}\,\mathrm{m}^2$]")
+    ax_2dfdf.set_ylabel("$\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
     ax_2dfdf.set_xlim(phase_range)
     ax_2dfdf.set_ylim(phi_range)
     ax_2dfdf.minorticks_on()
@@ -288,13 +303,39 @@ def plot_2d_fdf(
     return fig
 
 
-def plot_rm_hist(vals: np.ndarray, savename: str = "rm_hist.png", logger: logging.Logger = None):
+def plot_rm_hist(
+    vals: np.ndarray,
+    savename: str = "rm_hist.png",
+    logger: logging.Logger = None,
+):
     if logger is None:
         logger = psrutils.get_logger()
 
     fig, ax = plt.subplots(dpi=300, tight_layout=True)
-    ax.hist(vals, bins=30)
-    ax.set_xlabel("Profile-averaged RM [$\mathrm{rad}\,\mathrm{m}^2$]")
+    hist(vals, bins="knuth", ax=ax, histtype="stepfilled", density=True)
+    ax.set_ylabel("Probability Density")
+    ax.set_xlabel("RM [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+
+    logger.info(f"Saving plot file: {savename}")
+    fig.savefig(savename)
+    return fig, ax
+
+
+def plot_rm_vs_phi(
+    rm_phi_samples: np.ndarray, savename: str = "rm_phi.png", logger: logging.Logger = None
+):
+    if logger is None:
+        logger = psrutils.get_logger()
+
+    fig, ax = plt.subplots(dpi=300, tight_layout=True)
+    ax.boxplot(rm_phi_samples.T, showfliers=False)
+
+    xlims = ax.get_xlim()
+    ax.set_xticks(np.linspace(xlims[0], xlims[1], 5))
+    ax.set_xticklabels(np.arange(5) / 4)
+
+    ax.set_ylabel("RM [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+    ax.set_xlabel("Pulse Phase [rot]")
 
     logger.info(f"Saving plot file: {savename}")
     fig.savefig(savename)

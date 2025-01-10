@@ -142,6 +142,14 @@ class StokesCube(object):
         return tmp_archive.get_data()[0, :, :, :]
 
     @property
+    def mean_subband(self):
+        """Average in time and phase. Output has dimensions (pol, freq)."""
+        tmp_archive = self._archive.clone()
+        tmp_archive.tscrunch()
+        tmp_archive.bscrunch_to_nbin(1)
+        return tmp_archive.get_data()[0, :, :, 0]
+
+    @property
     def pol_profile(self):
         """Average in frequency and time. Output has dimensions (pol, phase)."""
         tmp_archive = self._archive.clone()
@@ -168,7 +176,12 @@ class StokesCube(object):
         prof = tmp_archive.get_Profile(0, 0, 0)
         return prof.snr()
 
-    def bscrunch(self, factor: int):
+    @property
+    def source(self):
+        """Get the source name."""
+        return self._archive.get_source()
+
+    def bscrunch_to_nbin(self, factor: int):
         self._archive.bscrunch_to_nbin(factor)
 
     @classmethod

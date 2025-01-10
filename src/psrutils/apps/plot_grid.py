@@ -40,7 +40,7 @@ def main(archives: tuple, bscr: int, ncols: int, nrows: int) -> None:
             ax = axes[row, col]
             snr = data.snr
             if snr < 35:
-                data.bscrunch(64)
+                data.bscrunch_to_nbin(64)
             prof = data.profile
             bins = np.arange(data.num_bin) / (data.num_bin - 1)
             ax.plot(bins, prof, color="k", linewidth=0.8)

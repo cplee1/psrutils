@@ -222,6 +222,7 @@ def rm_synthesis(
         # Initialise an array for bootstrapping
         tmp_fdf = np.empty(len(phi), dtype=np.complex128)
         rm_samples = np.empty(shape=(cube.num_bin, bootstrap_nsamp), dtype=np.float64)
+        rm_scat_samples = np.empty(bootstrap_nsamp, dtype=np.float64)
         rm_prof_samples = np.empty(bootstrap_nsamp, dtype=np.float64)
 
     logger.info("Computing RM per bin...")
@@ -247,8 +248,8 @@ def rm_synthesis(
             rm_samples = None
 
     if type(bootstrap_nsamp) is int:
-        # Bootstrap summed profile spectrum
-        logger.info("Computing RM of profile...")
+        # Bootstrap RM_prof
+        logger.info("Computing RM_profile...")
         for iter in trange(bootstrap_nsamp):
             tmp_prof_fdf = np.zeros(len(phi), dtype=np.float64)
             for bin in range(cube.num_bin):
@@ -265,7 +266,22 @@ def rm_synthesis(
     else:
         rm_prof_samples = None
 
-    return fdf, rmsf, rm_samples, rm_prof_samples, rm_stats
+    if type(bootstrap_nsamp) is int:
+        # Bootstrap RM_scat
+        logger.info("Computing RM_scatt...")
+        S = cube.mean_subband  # -> dim=(pol,freq)
+        W = np.where(S[0] == 0.0, 0.0, 1.0)  # Uniform weights
+        K = 1.0 / np.sum(W)
+        for iter in trange(bootstrap_nsamp):
+            Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
+            U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
+            P, model = _normalise_spectrum(Q_rvs + IMAG * U_rvs, S[0], cube.freqs, norm, logger)
+            tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
+            rm_scat_samples[iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
+    else:
+        rm_scat_samples = None
+
+    return fdf, rmsf, rm_samples, rm_prof_samples, rm_scat_samples, rm_stats
 
 
 def _rm_clean_1d(
