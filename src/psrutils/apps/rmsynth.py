@@ -17,6 +17,9 @@ import psrutils
 @click.option("-n", "nsamp", type=int, help="The number of bootstrap samples.")
 @click.option("--phi_plotlim", type=float, nargs=2, help="Plot limits in rad/m^2.")
 @click.option("--phase_plotlim", type=float, nargs=2, help="Plot limits in rotations.")
+@click.option(
+    "--discard", type=float, nargs=2, help="Discard RM samples outside this range in rad/m^2."
+)
 @click.option("--stairs", is_flag=True, help="Plot profile bins as stairs.")
 @click.option("--peaks", is_flag=True, help="Plot RM measurements.")
 def main(
@@ -29,6 +32,7 @@ def main(
     nsamp: int,
     phi_plotlim: Tuple[float, float],
     phase_plotlim: Tuple[float, float],
+    discard: Tuple[float, float],
     stairs: bool,
     peaks: bool,
 ) -> None:
@@ -45,11 +49,19 @@ def main(
     logger.info("Running RM-Synthesis")
     rmsyn_result = psrutils.rm_synthesis(cube, phi, bootstrap_nsamp=nsamp, logger=logger)
     fdf, rmsf, rm_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
+
+    if discard is not None:
+        rm_prof_samples_mask = rm_prof_samples[
+            (rm_prof_samples > discard[0]) & (rm_prof_samples < discard[1])
+        ]
+    else:
+        rm_prof_samples_mask = rm_prof_samples
+
     rm_phi_meas = np.mean(rm_samples, axis=1)
     rm_phi_unc = np.std(rm_samples, axis=1)
     rm_phi_mean = np.average(rm_phi_meas, weights=rm_phi_unc)
-    rm_prof_meas = np.mean(rm_prof_samples)
-    rm_prof_unc = np.std(rm_prof_samples)
+    rm_prof_meas = np.mean(rm_prof_samples_mask)
+    rm_prof_unc = np.std(rm_prof_samples_mask)
     rm_scat_meas = np.mean(rm_scat_samples)
     rm_scat_unc = np.std(rm_scat_samples)
 
@@ -65,6 +77,10 @@ def main(
     psrutils.plotting.plot_rm_hist(
         rm_prof_samples, f"{cube.source}_rm_prof_hist.png", logger=logger
     )
+    if discard is not None:
+        psrutils.plotting.plot_rm_hist(
+            rm_prof_samples_mask, f"{cube.source}_rm_prof_hist_masked.png", logger=logger
+        )
     psrutils.plotting.plot_rm_hist(
         rm_scat_samples, f"{cube.source}_rm_scat_hist.png", logger=logger
     )
