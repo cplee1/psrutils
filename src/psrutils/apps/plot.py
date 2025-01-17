@@ -1,3 +1,5 @@
+import logging
+
 import click
 
 import psrutils
@@ -20,14 +22,16 @@ def main(
     fscr: int,
     bscr: int,
 ) -> None:
+    logger = psrutils.get_logger(log_level=logging.INFO)
+
     cube = psrutils.StokesCube.from_psrchive(archive, tscr, fscr, bscr)
 
     if plot_tvsp:
         click.echo("Plotting time vs phase")
-        psrutils.plotting.plot_time_phase(cube)
+        psrutils.plotting.plot_time_phase(cube, logger=logger)
     if plot_fvsp:
         click.echo("Plotting frequency vs phase")
-        psrutils.plotting.plot_freq_phase(cube)
+        psrutils.plotting.plot_freq_phase(cube, logger=logger)
     if plot_prof:
         click.echo("Plotting profile")
-        psrutils.plotting.plot_profile(cube)
+        psrutils.plotting.plot_profile(cube, logger=logger)

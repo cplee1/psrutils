@@ -4,6 +4,7 @@ from typing import Tuple
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.stats as st
 from astropy.visualization import hist
 
 import psrutils
@@ -26,7 +27,11 @@ plt.rcParams["font.size"] = 12
 
 
 def plot_profile(
-    cube: psrutils.StokesCube, pol: int = 0, savename: str = "profile.png"
+    cube: psrutils.StokesCube,
+    pol: int = 0,
+    savename: str = "profile",
+    save_pdf: bool = False,
+    logger: logging.Logger = None,
 ) -> Tuple[plt.Figure, plt.Axes]:
     """Create a plot of integrated flux density vs phase for a specified polarisation.
 
@@ -37,7 +42,11 @@ def plot_profile(
     pol : `int`, optional
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
     savename : `str`, optional
-        The name of the plot file. Default: 'profile.png'.
+        The name of the plot file excluding the extension. Default: 'profile'.
+    save_pdf : `bool`, optional
+        Save the plot as a pdf? Default: False.
+    logger : logging.Logger, optional
+        A logger to use. Default: None.
 
     Returns
     -------
@@ -46,6 +55,9 @@ def plot_profile(
     ax : `matplotlib.axes.Axes`
         An Axes object.
     """
+    if logger is None:
+        logger = psrutils.get_logger()
+
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
@@ -57,12 +69,22 @@ def plot_profile(
     ax.set_xlabel("Pulse Phase [rot]")
     ax.set_ylabel("Flux Density [arb.]")
 
-    fig.savefig(savename)
+    logger.info(f"Saving plot file: {savename}.png")
+    fig.savefig(savename + ".png")
+
+    if save_pdf:
+        logger.info(f"Saving plot file: {savename}.pdf")
+        fig.savefig(savename + ".pdf")
+
     return fig, ax
 
 
 def plot_freq_phase(
-    cube: psrutils.StokesCube, pol: int = 0, savename: str = "freq_phase.png"
+    cube: psrutils.StokesCube,
+    pol: int = 0,
+    savename: str = "freq_phase",
+    save_pdf: bool = False,
+    logger: logging.Logger = None,
 ) -> Tuple[plt.Figure, plt.Axes]:
     """Create a plot of frequency vs phase for a specified polarisation.
 
@@ -73,7 +95,11 @@ def plot_freq_phase(
     pol : `int`, optional
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
     savename : `str`, optional
-        The name of the plot file. Default: 'freq_phase.png'.
+        The name of the plot file excluding the extension. Default: 'freq_phase'.
+    save_pdf : `bool`, optional
+        Save the plot as a pdf? Default: False.
+    logger : logging.Logger, optional
+        A logger to use. Default: None.
 
     Returns
     -------
@@ -82,6 +108,9 @@ def plot_freq_phase(
     ax : `matplotlib.axes.Axes`
         An Axes object.
     """
+    if logger is None:
+        logger = psrutils.get_logger()
+
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
@@ -97,12 +126,22 @@ def plot_freq_phase(
     ax.set_xlabel("Pulse Phase [rot]")
     ax.set_ylabel("Frequency [MHz]")
 
-    fig.savefig(savename)
+    logger.info(f"Saving plot file: {savename}.png")
+    fig.savefig(savename + ".png")
+
+    if save_pdf:
+        logger.info(f"Saving plot file: {savename}.pdf")
+        fig.savefig(savename + ".pdf")
+
     return fig, ax
 
 
 def plot_time_phase(
-    cube: psrutils.StokesCube, pol: int = 0, savename: str = "time_phase.png"
+    cube: psrutils.StokesCube,
+    pol: int = 0,
+    savename: str = "time_phase",
+    save_pdf: bool = False,
+    logger: logging.Logger = None,
 ) -> Tuple[plt.Figure, plt.Axes]:
     """Create a plot of time vs phase for a specified polarisation.
 
@@ -113,7 +152,11 @@ def plot_time_phase(
     pol : `int`, optional
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
     savename : `str`, optional
-        The name of the plot file. Default: 'folded_spectrum.png'.
+        The name of the plot file excluding the extension. Default: 'time_phase'.
+    save_pdf : `bool`, optional
+        Save the plot as a pdf? Default: False.
+    logger : logging.Logger, optional
+        A logger to use. Default: None.
 
     Returns
     -------
@@ -122,6 +165,9 @@ def plot_time_phase(
     ax : `matplotlib.axes.Axes`
         An Axes object.
     """
+    if logger is None:
+        logger = psrutils.get_logger()
+
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
@@ -137,7 +183,13 @@ def plot_time_phase(
     ax.set_xlabel("Pulse Phase [rot]")
     ax.set_ylabel("Time [s]")
 
-    fig.savefig(savename)
+    logger.info(f"Saving plot file: {savename}.png")
+    fig.savefig(savename + ".png")
+
+    if save_pdf:
+        logger.info(f"Saving plot file: {savename}.pdf")
+        fig.savefig(savename + ".pdf")
+
     return fig, ax
 
 
@@ -153,7 +205,8 @@ def plot_2d_fdf(
     plot_peaks: bool = False,
     phase_range: Tuple[float, float] = None,
     phi_range: Tuple[float, float] = None,
-    savename: str = "fdf.png",
+    savename: str = "fdf",
+    save_pdf: bool = False,
     logger: logging.Logger = None,
 ) -> plt.Figure:
     """Plot the 1-D and 2-D FDF as a function of phase.
@@ -183,7 +236,9 @@ def plot_2d_fdf(
     phi_range : `Tuple[float, float]`, optional
         The Faraday depth range in rad/m^2. Default: computed range.
     savename : `str`, optional
-        The name of the plot file. Default: 'fdf.png'.
+        The name of the plot file excluding the extension. Default: 'fdf'.
+    save_pdf : `bool`, optional
+        Save the plot as a pdf? Default: False.
     logger : logging.Logger, optional
         A logger to use. Default: None.
 
@@ -205,13 +260,13 @@ def plot_2d_fdf(
     fdf_amp_1D = fdf_amp_2D.mean(0)
 
     # Define Figure and Axes
-    fig = plt.figure(figsize=(7, 6), tight_layout=True, dpi=300)
+    fig = plt.figure(figsize=(5.5, 5), tight_layout=True, dpi=300)
     gs = gridspec.GridSpec(
         ncols=2,
         nrows=2,
         figure=fig,
         height_ratios=(1, 3),
-        width_ratios=(3, 1),
+        width_ratios=(3.5, 1),
         hspace=0,
         wspace=0,
     )
@@ -240,8 +295,8 @@ def plot_2d_fdf(
     ax_prof.set_yticks([])
     ax_prof.set_xticks([])
     ax_prof.text(
-        0.03,
-        0.90,
+        0.028,
+        0.89,
         f"{tmp_archive.get_source()}",
         horizontalalignment="left",
         verticalalignment="top",
@@ -288,9 +343,9 @@ def plot_2d_fdf(
             color="r",
             marker="none",
             linestyle="none",
-            elinewidth=0.7,
-            capthick=0.7,
-            capsize=1,
+            elinewidth=0.6,
+            capthick=0.6,
+            capsize=0,
         )
     ax_2dfdf.set_xlabel("Pulse Phase [rot]")
     ax_2dfdf.set_ylabel("$\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
@@ -298,32 +353,122 @@ def plot_2d_fdf(
     ax_2dfdf.set_ylim(phi_range)
     ax_2dfdf.minorticks_on()
 
-    logger.info(f"Saving plot file: {savename}")
-    fig.savefig(savename)
+    logger.info(f"Saving plot file: {savename}.png")
+    fig.savefig(savename + ".png")
+
+    if save_pdf:
+        logger.info(f"Saving plot file: {savename}.pdf")
+        fig.savefig(savename + ".pdf")
+
     return fig
 
 
 def plot_rm_hist(
-    vals: np.ndarray,
-    savename: str = "rm_hist.png",
+    samples: np.ndarray,
+    valid_samples: np.ndarray = None,
+    range: Tuple[float, float] = None,
+    title: str = None,
+    savename: str = "rm_hist",
+    save_pdf: bool = False,
     logger: logging.Logger = None,
 ):
+    """Plot a histogram of RM samples. If 'valid_samples' are provided, then
+    plot them in an inset. If 'range' is also provided, then indicate this range
+    on the primary plot using dashed lines.
+
+    Parameters
+    ----------
+    samples : `np.ndarray`
+        The RM samples to generate a histogram for.
+    valid_samples : `np.ndarray`, optional
+        A subset of the RM samples to generate a histogram for. Default: None.
+    range : `Tuple[float, float]`, optional
+        A range to indicate on the primary plot. Default: None.
+    title : `str`, optional
+        A title to add to the figure. Default: None.
+    savename : `str`, optional
+        The name of the plot file excluding the extension. Default: 'rm_hist'.
+    save_pdf : `bool`, optional
+        Save the plot as a pdf? Default: False.
+    logger : logging.Logger, optional
+        A logger to use. Default: None.
+
+    Returns
+    -------
+    fig : `matplotlib.figure.Figure`
+        A Figure object.
+    """
     if logger is None:
         logger = psrutils.get_logger()
 
-    fig, ax = plt.subplots(dpi=300, tight_layout=True)
-    hist(vals, bins="knuth", ax=ax, histtype="stepfilled", density=True)
-    ax.set_ylabel("Probability Density")
-    ax.set_xlabel("RM [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+    fig, ax = plt.subplots(figsize=(4.5, 4), dpi=300, tight_layout=True)
+    hist(samples, bins="knuth", ax=ax, histtype="stepfilled", density=True)
+    main_ax = ax
+    main_samples = samples
 
-    logger.info(f"Saving plot file: {savename}")
-    fig.savefig(savename)
-    return fig, ax
+    if valid_samples is not None:
+        ax_ins = ax.inset_axes([0.1, 0.6, 0.3, 0.3])
+        main_ax = ax_ins
+        main_samples = valid_samples
+        hist(valid_samples, bins="knuth", ax=ax_ins, histtype="stepfilled", density=True)
+        ax_ins.minorticks_on()
+
+        if range is not None:
+            ax.axvline(range[0], linestyle="--", linewidth=1, c="tab:red")
+            ax.axvline(range[1], linestyle="--", linewidth=1, c="tab:red")
+
+    # Plot best-fit Gaussian distribution
+    xlims = main_ax.get_xlim()
+    gauss_x = np.linspace(*xlims, 1000)
+    main_ax.plot(
+        gauss_x,
+        st.norm(np.mean(main_samples), np.std(main_samples)).pdf(gauss_x),
+        color="k",
+        lw=1,
+        zorder=1,
+    )
+    main_ax.set_xlim(xlims)
+
+    ax.minorticks_on()
+    ax.set_ylabel("Probability Density")
+    ax.set_xlabel("$\mathrm{RM}_\mathrm{profile}$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+    if title is not None:
+        ax.set_title(title)
+
+    logger.info(f"Saving plot file: {savename}.png")
+    fig.savefig(savename + ".png")
+
+    if save_pdf:
+        logger.info(f"Saving plot file: {savename}.pdf")
+        fig.savefig(savename + ".pdf")
+
+    return fig
 
 
 def plot_rm_vs_phi(
-    rm_phi_samples: np.ndarray, savename: str = "rm_phi.png", logger: logging.Logger = None
+    rm_phi_samples: np.ndarray,
+    savename: str = "rm_phi",
+    save_pdf: bool = False,
+    logger: logging.Logger = None,
 ):
+    """Plot boxplots showing the distribution of RM samples for each phase bin.
+
+    Parameters
+    ----------
+    rm_phi_samples : `np.ndarray`
+        A 2-D array used to make a boxplot.
+    savename : `str`, optional
+        The name of the plot file excluding the extension. Default: 'rm_phi'.
+    save_pdf : `bool`, optional
+        Save the plot as a pdf? Default: False.
+    logger : logging.Logger, optional
+        A logger to use. Default: None.
+
+    Returns
+    -------
+    fig : `matplotlib.figure.Figure`
+        A Figure object.
+    """
     if logger is None:
         logger = psrutils.get_logger()
 
@@ -337,6 +482,11 @@ def plot_rm_vs_phi(
     ax.set_ylabel("RM [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
     ax.set_xlabel("Pulse Phase [rot]")
 
-    logger.info(f"Saving plot file: {savename}")
-    fig.savefig(savename)
-    return fig, ax
+    logger.info(f"Saving plot file: {savename}.png")
+    fig.savefig(savename + ".png")
+
+    if save_pdf:
+        logger.info(f"Saving plot file: {savename}.pdf")
+        fig.savefig(savename + ".pdf")
+
+    return fig
