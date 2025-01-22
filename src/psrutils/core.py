@@ -46,15 +46,21 @@ class StokesCube(object):
             self._archive = archive
 
         # Ensure the archive is in the Stokes basis
-        if self._archive.get_state() != "Stokes":
+        if self._archive.get_state() != "Stokes" and self._archive.get_npol() == 4:
             self._archive.convert_state("Stokes")
 
         # Ensure the archive is dedispersed
         if not self._archive.get_dedispersed():
-            self._archive.dedisperse()
+            try:
+                self._archive.dedisperse()
+            except RuntimeError:
+                print("Could not dedisperse archive.")
 
         # Must remove the baseline before downsampling
-        self._archive.remove_baseline()
+        try:
+            self._archive.remove_baseline()
+        except RuntimeError:
+            print("Could not remove baseline from archive.")
 
         # Downsample
         if type(tscrunch) is int:
@@ -76,12 +82,12 @@ class StokesCube(object):
     @property
     def min_freq(self):
         """Lower edge frequency in MHz."""
-        return self._archive.get_centre_frequency() - self._archive.get_bandwidth() / 2.0
+        return self._archive.get_centre_frequency() - abs(self._archive.get_bandwidth()) / 2.0
 
     @property
     def max_freq(self):
         """Upper edge frequency in MHz."""
-        return self._archive.get_centre_frequency() + self._archive.get_bandwidth() / 2.0
+        return self._archive.get_centre_frequency() + abs(self._archive.get_bandwidth()) / 2.0
 
     @property
     def freqs(self):
@@ -181,8 +187,11 @@ class StokesCube(object):
         """Get the source name."""
         return self._archive.get_source()
 
-    def bscrunch_to_nbin(self, factor: int):
-        self._archive.bscrunch_to_nbin(factor)
+    def bscrunch_to_nbin(self, nbin: int):
+        self._archive.bscrunch_to_nbin(nbin)
+
+    def rotate_phase(self, phase: float):
+        self._archive.rotate_phase(phase)
 
     @classmethod
     def from_psrchive(
@@ -201,7 +210,7 @@ class StokesCube(object):
         archive : `str` or `psrchive.Archive`
             Path to an archive file, or an Archive object, to load.
         clone : `bool`, optional
-            If True and a 'psrchive.Archive` object is provided, clone the input
+            If True and a `psrchive.Archive` object is provided, clone the input
             object. Otherwise store a reference to 'archive'. Default: False.
         tscrunch : `int`, optional
             Scrunch in time to this number of sub-integrations. Default: None.
