@@ -30,11 +30,11 @@ plt.rcParams["font.size"] = 12
 def plot_profile(
     cube: psrutils.StokesCube,
     pol: int = 0,
-    offpulse_win: np.ndarray = None,
+    offpulse_win: np.ndarray | None = None,
     savename: str = "profile",
     save_pdf: bool = False,
-    logger: logging.Logger = None,
-) -> Tuple[plt.Figure, plt.Axes]:
+    logger: logging.Logger | None = None,
+) -> None:
     """Create a plot of integrated flux density vs phase for a specified polarisation.
 
     Parameters
@@ -44,20 +44,13 @@ def plot_profile(
     pol : `int`, optional
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
     offpulse_win : `np.ndarray`, optional
-        The bin indices of the offpulse window. Default: None.
+        The bin indices of the offpulse window. Default: `None`.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'profile'.
     save_pdf : `bool`, optional
-        Save the plot as a pdf? Default: False.
+        Save the plot as a pdf? Default: `False`.
     logger : logging.Logger, optional
-        A logger to use. Default: None.
-
-    Returns
-    -------
-    fig : `matplotlib.figure.Figure`
-        A Figure object.
-    ax : `matplotlib.axes.Axes`
-        An Axes object.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -94,7 +87,7 @@ def plot_profile(
         logger.info(f"Saving plot file: {savename}.pdf")
         fig.savefig(savename + ".pdf")
 
-    return fig, ax
+    plt.close()
 
 
 def plot_freq_phase(
@@ -102,8 +95,8 @@ def plot_freq_phase(
     pol: int = 0,
     savename: str = "freq_phase",
     save_pdf: bool = False,
-    logger: logging.Logger = None,
-) -> Tuple[plt.Figure, plt.Axes]:
+    logger: logging.Logger | None = None,
+) -> None:
     """Create a plot of frequency vs phase for a specified polarisation.
 
     Parameters
@@ -115,16 +108,9 @@ def plot_freq_phase(
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'freq_phase'.
     save_pdf : `bool`, optional
-        Save the plot as a pdf? Default: False.
+        Save the plot as a pdf? Default: `False`.
     logger : logging.Logger, optional
-        A logger to use. Default: None.
-
-    Returns
-    -------
-    fig : `matplotlib.figure.Figure`
-        A Figure object.
-    ax : `matplotlib.axes.Axes`
-        An Axes object.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -151,7 +137,7 @@ def plot_freq_phase(
         logger.info(f"Saving plot file: {savename}.pdf")
         fig.savefig(savename + ".pdf")
 
-    return fig, ax
+    plt.close()
 
 
 def plot_time_phase(
@@ -159,8 +145,8 @@ def plot_time_phase(
     pol: int = 0,
     savename: str = "time_phase",
     save_pdf: bool = False,
-    logger: logging.Logger = None,
-) -> Tuple[plt.Figure, plt.Axes]:
+    logger: logging.Logger | None = None,
+) -> None:
     """Create a plot of time vs phase for a specified polarisation.
 
     Parameters
@@ -172,16 +158,9 @@ def plot_time_phase(
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'time_phase'.
     save_pdf : `bool`, optional
-        Save the plot as a pdf? Default: False.
+        Save the plot as a pdf? Default: `False`.
     logger : logging.Logger, optional
-        A logger to use. Default: None.
-
-    Returns
-    -------
-    fig : `matplotlib.figure.Figure`
-        A Figure object.
-    ax : `matplotlib.axes.Axes`
-        An Axes object.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -208,7 +187,7 @@ def plot_time_phase(
         logger.info(f"Saving plot file: {savename}.pdf")
         fig.savefig(savename + ".pdf")
 
-    return fig, ax
+    plt.close()
 
 
 def plot_2d_fdf(
@@ -216,18 +195,18 @@ def plot_2d_fdf(
     fdf_amp_2D: np.ndarray,
     phi: np.ndarray,
     rmsf_fwhm: float,
-    rm_phi_qty: tuple = None,
-    rm_prof_qty: tuple = None,
-    mask: np.ndarray = None,
+    rm_phi_qty: tuple | None = None,
+    rm_prof_qty: tuple | None = None,
+    mask: np.ndarray | None = None,
     plot_stairs: bool = False,
     plot_peaks: bool = False,
-    phase_range: Tuple[float, float] = None,
-    phi_range: Tuple[float, float] = None,
+    phase_range: Tuple[float, float] | None = None,
+    phi_range: Tuple[float, float] | None = None,
     savename: str = "fdf",
     save_pdf: bool = False,
     dark_mode: bool = False,
-    logger: logging.Logger = None,
-) -> plt.Figure:
+    logger: logging.Logger | None = None,
+) -> None:
     """Plot the 1-D and 2-D FDF as a function of phase.
 
     Parameters
@@ -241,32 +220,28 @@ def plot_2d_fdf(
     rmsf_fwhm : `float`
         The FWHM of the RM spread function.
     rm_phi_qty : `Tuple[np.ndarray, np.ndarray]`, optional
-        The RM measurements and uncertainties for each phase bin. Default: None.
+        The RM measurements and uncertainties for each phase bin. Default: `None`.
     rm_prof_qty : `Tuple[float, float]`, optional
-        The RM measurement and uncertainty for the profile. Default: None.
+        The RM measurement and uncertainty for the profile. Default: `None`.
     mask : `np.ndarray`, optional
         An array of booleans to act as a mask for the measured RM values.
+        Default: `None`.
     plot_stairs : `bool`, optional
-        Plot the profile bins as stairs. Default: False.
+        Plot the profile bins as stairs. Default: `False`.
     plot_peaks : `bool`, optional
-        Plot the measure RM and error bars. Default: False.
+        Plot the measure RM and error bars. Default: `False`.
     phase_range : `Tuple[float, float]`, optional
         The phase range in rotations. Default: [0, 1].
     phi_range : `Tuple[float, float]`, optional
-        The Faraday depth range in rad/m^2. Default: computed range.
+        The Faraday depth range in rad/m^2. Default: full range.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'fdf'.
     save_pdf : `bool`, optional
-        Save the plot as a pdf? Default: False.
+        Save the plot as a pdf? Default: `False`.
     dark_mode : `bool`, optional
-        Use a black background and white lines. Default: False.
+        Use a black background and white lines. Default: `False`.
     logger : logging.Logger, optional
-        A logger to use. Default: None.
-
-    Returns
-    -------
-    fig : `matplotlib.figure.Figure`
-        A Figure object.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -435,18 +410,16 @@ def plot_2d_fdf(
 
     plt.close()
 
-    return fig
-
 
 def plot_rm_hist(
     samples: np.ndarray,
-    valid_samples: np.ndarray = None,
-    range: Tuple[float, float] = None,
-    title: str = None,
+    valid_samples: np.ndarray | None = None,
+    range: Tuple[float, float] | None = None,
+    title: str | None = None,
     savename: str = "rm_hist",
     save_pdf: bool = False,
-    logger: logging.Logger = None,
-):
+    logger: logging.Logger | None = None,
+) -> None:
     """Plot a histogram of RM samples. If 'valid_samples' are provided, then
     plot them in an inset. If 'range' is also provided, then indicate this range
     on the primary plot using dashed lines.
@@ -456,22 +429,17 @@ def plot_rm_hist(
     samples : `np.ndarray`
         The RM samples to generate a histogram for.
     valid_samples : `np.ndarray`, optional
-        A subset of the RM samples to generate a histogram for. Default: None.
+        A subset of the RM samples to generate a histogram for. Default: `None`.
     range : `Tuple[float, float]`, optional
-        A range to indicate on the primary plot. Default: None.
+        A range to indicate on the primary plot. Default: `None`.
     title : `str`, optional
-        A title to add to the figure. Default: None.
+        A title to add to the figure. Default: `None`.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'rm_hist'.
     save_pdf : `bool`, optional
-        Save the plot as a pdf? Default: False.
+        Save the plot as a pdf? Default: `False`.
     logger : logging.Logger, optional
-        A logger to use. Default: None.
-
-    Returns
-    -------
-    fig : `matplotlib.figure.Figure`
-        A Figure object.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -517,15 +485,15 @@ def plot_rm_hist(
         logger.info(f"Saving plot file: {savename}.pdf")
         fig.savefig(savename + ".pdf")
 
-    return fig
+    plt.close()
 
 
 def plot_rm_vs_phi(
     rm_phi_samples: np.ndarray,
     savename: str = "rm_phi",
     save_pdf: bool = False,
-    logger: logging.Logger = None,
-):
+    logger: logging.Logger | None = None,
+) -> None:
     """Plot boxplots showing the distribution of RM samples for each phase bin.
 
     Parameters
@@ -535,14 +503,9 @@ def plot_rm_vs_phi(
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'rm_phi'.
     save_pdf : `bool`, optional
-        Save the plot as a pdf? Default: False.
+        Save the plot as a pdf? Default: `False`.
     logger : logging.Logger, optional
-        A logger to use. Default: None.
-
-    Returns
-    -------
-    fig : `matplotlib.figure.Figure`
-        A Figure object.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -564,4 +527,4 @@ def plot_rm_vs_phi(
         logger.info(f"Saving plot file: {savename}.pdf")
         fig.savefig(savename + ".pdf")
 
-    return fig
+    plt.close()

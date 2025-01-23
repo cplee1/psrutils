@@ -14,10 +14,10 @@ class StokesCube(object):
         self,
         archive: psrchive.Archive,
         clone: bool = False,
-        tscrunch: int = None,
-        fscrunch: int = None,
-        bscrunch: int = None,
-        rotate_phase: float = None,
+        tscrunch: int | None = None,
+        fscrunch: int | None = None,
+        bscrunch: int | None = None,
+        rotate_phase: float | None = None,
     ):
         """Create a StokesCube instance from a PSRCHIVE archive.
 
@@ -27,15 +27,15 @@ class StokesCube(object):
             An Archive object.
         clone : `bool`, optional
             If True, clone the input object. Otherwise store a reference to 'archive'.
-            Default: False.
+            Default: `False`.
         tscrunch : `int`, optional
-            Scrunch in time to this number of sub-integrations.
+            Scrunch in time to this number of sub-integrations. Default: `None`.
         fscrunch : `int`, optional
-            Scrunch in frequency to this number of channels.
+            Scrunch in frequency to this number of channels. Default: `None`.
         bscrunch : `int`, optional
-            Scrunch in phase to this number of bins.
+            Scrunch in phase to this number of bins. Default: `None`.
         rotate_phase : `float`, optional
-            Rotate in phase by this amount. Default: None.
+            Rotate in phase by this amount. Default: `None`.
         """
         if type(archive) is not psrchive.Archive:
             raise ValueError("archive must be a psrchive.Archive")
@@ -191,9 +191,11 @@ class StokesCube(object):
         return self._archive.get_source()
 
     def bscrunch_to_nbin(self, nbin: int):
+        """ "Downsample to nbin phase bins."""
         self._archive.bscrunch_to_nbin(nbin)
 
     def rotate_phase(self, phase: float):
+        """Rotate by a fraction of the pulse phase."""
         self._archive.rotate_phase(phase)
 
     @classmethod
@@ -201,10 +203,10 @@ class StokesCube(object):
         cls,
         archive: Union[str, psrchive.Archive],
         clone: bool = False,
-        tscrunch: int = None,
-        fscrunch: int = None,
-        bscrunch: int = None,
-        rotate_phase: float = None,
+        tscrunch: int | None = None,
+        fscrunch: int | None = None,
+        bscrunch: int | None = None,
+        rotate_phase: float | None = None,
     ):
         """Create a StokesCube from a PSRCHIVE archive object.
 
@@ -214,19 +216,19 @@ class StokesCube(object):
             Path to an archive file, or an Archive object, to load.
         clone : `bool`, optional
             If True and a `psrchive.Archive` object is provided, clone the input
-            object. Otherwise store a reference to 'archive'. Default: False.
+            object. Otherwise store a reference to 'archive'. Default: `False`.
         tscrunch : `int`, optional
-            Scrunch in time to this number of sub-integrations. Default: None.
+            Scrunch in time to this number of sub-integrations. Default: `None`.
         fscrunch : `int`, optional
-            Scrunch in frequency to this number of channels. Default: None.
+            Scrunch in frequency to this number of channels. Default: `None`.
         bscrunch : `int`, optional
-            Scrunch in phase to this number of bins. Default: None.
+            Scrunch in phase to this number of bins. Default: `None`.
         rotate_phase : `float`, optional
-            Rotate in phase by this amount. Default: None.
+            Rotate in phase by this amount. Default: `None`.
 
         Returns
         -------
-        cube : StokesCube
+        cube : `StokesCube`
             A StokesCube object.
         """
         if type(archive) is str:

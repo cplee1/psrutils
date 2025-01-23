@@ -13,7 +13,7 @@ __all__ = ["rm_synthesis", "rm_clean"]
 
 
 def _fit_linear_model(
-    freqs: np.ndarray, amps: np.ndarray, logger: logging.Logger = None
+    freqs: np.ndarray, amps: np.ndarray, logger: logging.Logger | None = None
 ) -> np.ndarray:
     """Fit a linear model to spectral data.
 
@@ -24,7 +24,7 @@ def _fit_linear_model(
     amps : `np.ndarray`
         A list of amplitudes corresponding to each frequency.
     logger: `logging.Logger`, optional
-        A logger to use. Default: None.
+        A logger to use. Default: `None`.
 
     Returns
     -------
@@ -50,7 +50,11 @@ def _fit_linear_model(
 
 
 def _normalise_spectrum(
-    P: np.ndarray, S: np.ndarray, freqs: np.ndarray, norm: str = None, logger: logging.Logger = None
+    P: np.ndarray,
+    S: np.ndarray,
+    freqs: np.ndarray,
+    norm: str | None = None,
+    logger: logging.Logger | None = None,
 ) -> np.ndarray:
     """Normalise the complex linear polarisation by Stokes I.
 
@@ -67,9 +71,9 @@ def _normalise_spectrum(
         Spectral model subtraction method.
             'mod' - fit a linear model to Stokes I
             'val' - use per-channel Stokes I values
-        Default: None.
+        Default: `None`.
     logger : `logging.Logger`, optional
-        A logger to use. Default: None.
+        A logger to use. Default: `None`.
 
     Returns
     -------
@@ -151,12 +155,12 @@ def _measure_rm_unc_analytic(fdf_peak_amp: float, rmsf_fwhm: float, noise: np.nd
 def rm_synthesis(
     cube: psrutils.StokesCube,
     phi: np.ndarray,
-    norm: str = None,
+    norm: str | None = None,
     meas_rm_prof: bool = False,
     meas_rm_scat: bool = False,
-    bootstrap_nsamp: int = None,
-    offpulse_win: np.ndarray = None,
-    logger: logging.Logger = None,
+    bootstrap_nsamp: int | None = None,
+    offpulse_win: np.ndarray | None = None,
+    logger: logging.Logger | None = None,
 ) -> None:
     """Perform RM-synthesis for each phase bin.
 
@@ -170,17 +174,17 @@ def rm_synthesis(
         Spectral model subtraction method.
             'mod' - fit a linear model to Stokes I
             'val' - use per-channel Stokes I values
-        Default: None.
+        Default: `None`.
     meas_rm_prof : `bool`, optional
-        Measure RM_prof. Default: False.
+        Measure RM_prof. Default: `False`.
     meas_rm_scat : `bool`, optional
-        Measure RM_scat. Default: False.
+        Measure RM_scat. Default: `False`.
     boostrap_nsamp : `int`, optional
-        Number of bootstrap iterations. Default: None.
+        Number of bootstrap iterations. Default: `None`.
     offpulse_win : `np.ndarray`, optional
-        The bin indices of the offpulse window. Default: None.
+        The bin indices of the offpulse window. Default: `None`.
     logger : `logging.Logger`, optional
-        A logger to use. Default: None.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -323,7 +327,7 @@ def _rm_clean_1d(
     niter: int = 2000,
     gain: float = 0.1,
     cutoff: float = 3.0,
-    logger: logging.Logger = None,
+    logger: logging.Logger | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Deconvolve the RMSF from the FDF using the RM-CLEAN algorithm.
 
@@ -344,7 +348,7 @@ def _rm_clean_1d(
     cutoff : `float`, optional
         RM-CLEAN component cutoff in sigma. Default: 3.0.
     logger : `logging.Logger`, optional
-        A logger to use. Default: None.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -397,7 +401,7 @@ def rm_clean(
     niter: int = 2000,
     gain: float = 0.1,
     cutoff: float = 3.0,
-    logger: logging.Logger = None,
+    logger: logging.Logger | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Deconvolve the RMSF from the FDF using the RM-CLEAN algorithm.
 
@@ -418,7 +422,7 @@ def rm_clean(
     cutoff : `float`, optional
         RM-CLEAN component cutoff in sigma. Default: 3.0.
     logger : `logging.Logger`, optional
-        A logger to use. Default: None.
+        A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
