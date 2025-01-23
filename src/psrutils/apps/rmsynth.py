@@ -9,6 +9,13 @@ import psrutils
 
 @click.command()
 @click.argument("archive", nargs=1, type=click.Path(exists=True))
+@click.option(
+    "-L",
+    "log_level",
+    type=click.Choice(["DEBUG", "INFO", "ERROR"], case_sensitive=False),
+    default="INFO",
+    help="The logger verbosity level.",
+)
 @click.option("-f", "fscr", type=int, help="Fscrunch to this number of channels.")
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
@@ -21,9 +28,15 @@ import psrutils
     "--discard", type=float, nargs=2, help="Discard RM samples outside this range in rad/m^2."
 )
 @click.option("--stairs", is_flag=True, help="Plot profile bins as stairs.")
+@click.option("--meas_rm_prof", is_flag=True, help="Measure RM_prof.")
+@click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
+@click.option("--boxplot", is_flag=True, help="Plot RM_phi as boxplots.")
 @click.option("--peaks", is_flag=True, help="Plot RM measurements.")
+@click.option("--save_pdf", is_flag=True, help="Save as a PDF.")
+@click.option("-d", "dark_mode", is_flag=True, help="Use a dark background.")
 def main(
     archive: str,
+    log_level: str,
     fscr: int,
     bscr: int,
     rotate: float,
@@ -34,72 +47,109 @@ def main(
     phase_plotlim: Tuple[float, float],
     discard: Tuple[float, float],
     stairs: bool,
+    meas_rm_prof: bool,
+    meas_rm_scat: bool,
+    boxplot: bool,
     peaks: bool,
+    save_pdf: bool,
+    dark_mode: bool,
 ) -> None:
-    if nsamp is None:
-        raise NotImplementedError("Current implementation only supports bootstrapping.")
-
-    logger = psrutils.get_logger(log_level=logging.INFO)
+    log_level_dict = psrutils.get_log_levels()
+    logger = psrutils.get_logger(log_level=log_level_dict[log_level])
 
     logger.info(f"Loading archive: {archive}")
     cube = psrutils.StokesCube.from_psrchive(archive, False, 1, fscr, bscr, rotate)
 
-    phi = np.arange(-1.0 * rmlim, rmlim + rmres, rmres)
+    # Get offpulse window, assuming offpulse is 1/8 of profile
+    offpulse_win = psrutils.get_offpulse_region(cube.profile, logger=logger)
+    logger.debug(f"Offpulse bin indices: {offpulse_win}")
+    psrutils.plot_profile(
+        cube,
+        offpulse_win=offpulse_win,
+        savename=f"{cube.source}_profile",
+        save_pdf=save_pdf,
+        logger=logger,
+    )
 
     logger.info("Running RM-Synthesis")
-    rmsyn_result = psrutils.rm_synthesis(cube, phi, bootstrap_nsamp=nsamp, logger=logger)
-    fdf, rmsf, rm_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
+    phi = np.arange(-1.0 * rmlim, rmlim + rmres, rmres)
+    rmsyn_result = psrutils.rm_synthesis(
+        cube,
+        phi,
+        meas_rm_prof=meas_rm_prof,
+        meas_rm_scat=meas_rm_scat,
+        bootstrap_nsamp=nsamp,
+        offpulse_win=offpulse_win,
+        logger=logger,
+    )
+    fdf, rmsf, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
     logger.info(rm_stats)
 
-    if discard is not None:
-        rm_prof_samples_valid = rm_prof_samples[
-            (rm_prof_samples > discard[0]) & (rm_prof_samples < discard[1])
-        ]
+    if type(nsamp) is int:
+        rm_phi_meas = np.mean(rm_phi_samples, axis=1)
+        rm_phi_unc = np.std(rm_phi_samples, axis=1)
+        rm_phi_qty = (rm_phi_meas, rm_phi_unc)
+        peak_mask = np.where(rm_phi_unc < 1, True, False)
+
+        with open(f"{cube.source}_rm_phi.csv", "w") as f:
+            for meas, unc in zip(rm_phi_meas, rm_phi_unc):
+                f.write(f"{meas:.4f},{unc:.4f}\n")
+
+        if boxplot:
+            psrutils.plotting.plot_rm_vs_phi(
+                rm_phi_samples,
+                savename=f"{cube.source}_rm_phi_boxplot",
+                save_pdf=save_pdf,
+                logger=logger,
+            )
+
+        if meas_rm_prof:
+            if discard is not None:
+                rm_prof_samples_valid = rm_prof_samples[
+                    (rm_prof_samples > discard[0]) & (rm_prof_samples < discard[1])
+                ]
+            else:
+                rm_prof_samples_valid = rm_prof_samples
+            rm_prof_meas = np.mean(rm_prof_samples_valid)
+            rm_prof_unc = np.std(rm_prof_samples_valid)
+            rm_prof_qty = (rm_prof_meas, rm_prof_unc)
+
+            with open(f"{cube.source}_rm_prof.csv", "w") as f:
+                f.write(f"{cube.source},{rm_prof_meas:.4f},{rm_prof_unc:.4f}\n")
+
+            psrutils.plotting.plot_rm_hist(
+                rm_prof_samples,
+                valid_samples=rm_prof_samples_valid,
+                range=discard,
+                title=cube.source,
+                savename=f"{cube.source}_rm_prof_hist",
+                save_pdf=save_pdf,
+                logger=logger,
+            )
+        else:
+            rm_prof_qty = None
+
+        if meas_rm_scat:
+            rm_scat_meas = np.mean(rm_scat_samples)
+            rm_scat_unc = np.std(rm_scat_samples)
+
+            with open(f"{cube.source}_rm_scat.csv", "w") as f:
+                f.write(f"{cube.source},{rm_scat_meas:.4f},{rm_scat_unc:.4f}\n")
+
+            psrutils.plotting.plot_rm_hist(
+                rm_scat_samples,
+                title=cube.source,
+                savename=f"{cube.source}_rm_scat_hist",
+                save_pdf=save_pdf,
+                logger=logger,
+            )
     else:
-        rm_prof_samples_valid = None
-
-    rm_phi_meas = np.mean(rm_samples, axis=1)
-    rm_phi_unc = np.std(rm_samples, axis=1)
-    rm_phi_mean = np.average(rm_phi_meas, weights=rm_phi_unc)
-    rm_scat_meas = np.mean(rm_scat_samples)
-    rm_scat_unc = np.std(rm_scat_samples)
-
-    if discard is not None:
-        rm_prof_meas = np.mean(rm_prof_samples_valid)
-        rm_prof_unc = np.std(rm_prof_samples_valid)
-    else:
-        rm_prof_meas = np.mean(rm_prof_samples)
-        rm_prof_unc = np.std(rm_prof_samples)
-
-    with open(f"{cube.source}.csv", "w") as f:
-        f.write(
-            f"{cube.source},{rm_phi_mean:.4f},{rm_prof_meas:.4f},{rm_prof_unc:.4f},{rm_scat_meas:.4f},{rm_scat_unc:.4f}\n"
-        )
-
-    with open(f"{cube.source}_rm_phi.csv", "w") as f:
-        for meas, unc in zip(rm_phi_meas, rm_phi_unc):
-            f.write(f"{meas:.4f},{unc:.4f}\n")
-
-    psrutils.plotting.plot_rm_hist(
-        rm_prof_samples,
-        valid_samples=rm_prof_samples_valid,
-        range=discard,
-        title=cube.source,
-        savename=f"{cube.source}_rm_prof_hist",
-        save_pdf=True,
-        logger=logger,
-    )
-    psrutils.plotting.plot_rm_hist(
-        rm_scat_samples,
-        title=cube.source,
-        savename=f"{cube.source}_rm_scat_hist",
-        logger=logger,
-    )
-    psrutils.plotting.plot_rm_vs_phi(
-        rm_samples,
-        savename=f"{cube.source}_rm_phi_boxplot",
-        logger=logger,
-    )
+        rm_phi_qty = (rm_phi_samples, None)
+        if meas_rm_prof:
+            rm_prof_qty = (rm_prof_samples, None)
+        else:
+            rm_prof_qty = None
+        peak_mask = None
 
     logger.info("Running RM-CLEAN")
     rmcln_result = psrutils.rm_clean(phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, logger=logger)
@@ -111,14 +161,15 @@ def main(
         np.abs(cln_fdf),
         phi,
         rmsf_fwhm=rm_stats["rmsf_fwhm"],
-        rm_phi_meas=(rm_phi_meas, rm_phi_unc),
-        rm_prof_meas=(rm_prof_meas, rm_prof_unc),
-        mask=np.where(rm_phi_unc < 1, True, False),
+        rm_phi_qty=rm_phi_qty,
+        rm_prof_qty=rm_prof_qty,
+        mask=peak_mask,
         plot_stairs=stairs,
         plot_peaks=peaks,
         phase_range=phase_plotlim,
         phi_range=phi_plotlim,
         savename=f"{cube.source}_fdf",
-        save_pdf=True,
+        save_pdf=save_pdf,
+        dark_mode=dark_mode,
         logger=logger,
     )

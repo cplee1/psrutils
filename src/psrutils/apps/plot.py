@@ -7,6 +7,13 @@ import psrutils
 
 @click.command()
 @click.argument("archive", nargs=1, type=click.Path(exists=True))
+@click.option(
+    "-L",
+    "log_level",
+    type=click.Choice(["DEBUG", "INFO", "ERROR"], case_sensitive=False),
+    default="INFO",
+    help="The logger verbosity level.",
+)
 @click.option("-Y", "plot_tvsp", is_flag=True, help="Plot a time vs phase.")
 @click.option("-G", "plot_fvsp", is_flag=True, help="Plot a frequency vs phase.")
 @click.option("-D", "plot_prof", is_flag=True, help="Plot a pulse profile.")
@@ -15,6 +22,7 @@ import psrutils
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 def main(
     archive: str,
+    log_level: str,
     plot_tvsp: bool,
     plot_fvsp: bool,
     plot_prof: bool,
@@ -22,7 +30,8 @@ def main(
     fscr: int,
     bscr: int,
 ) -> None:
-    logger = psrutils.get_logger(log_level=logging.INFO)
+    log_level_dict = psrutils.get_log_levels()
+    logger = psrutils.get_logger(log_level=log_level_dict[log_level])
 
     cube = psrutils.StokesCube.from_psrchive(archive, tscr, fscr, bscr)
 

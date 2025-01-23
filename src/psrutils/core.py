@@ -47,7 +47,10 @@ class StokesCube(object):
 
         # Ensure the archive is in the Stokes basis
         if self._archive.get_state() != "Stokes" and self._archive.get_npol() == 4:
-            self._archive.convert_state("Stokes")
+            try:
+                self._archive.convert_state("Stokes")
+            except RuntimeError:
+                print("Could not convert to Stokes.")
 
         # Ensure the archive is dedispersed
         if not self._archive.get_dedispersed():
