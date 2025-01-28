@@ -331,7 +331,8 @@ def plot_2d_fdf(
     # Plot 2D FDF
     cmap = plt.get_cmap(f"cmr.{cmap_name}")
     ax_2dfdf.imshow(
-        np.flipud(fdf_amp_2D.transpose()).astype(float),
+        np.transpose(fdf_amp_2D).astype(float),
+        origin="lower",
         extent=(0, 1, phi[0], phi[-1]),
         aspect="auto",
         cmap=cmap,
