@@ -27,7 +27,6 @@ import psrutils
 @click.option(
     "--discard", type=float, nargs=2, help="Discard RM samples outside this range in rad/m^2."
 )
-@click.option("--stairs", is_flag=True, help="Plot profile bins as stairs.")
 @click.option("--meas_rm_prof", is_flag=True, help="Measure RM_prof.")
 @click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
 @click.option("--boxplot", is_flag=True, help="Plot RM_phi as boxplots.")
@@ -46,7 +45,6 @@ def main(
     phi_plotlim: Tuple[float, float],
     phase_plotlim: Tuple[float, float],
     discard: Tuple[float, float],
-    stairs: bool,
     meas_rm_prof: bool,
     meas_rm_scat: bool,
     boxplot: bool,
@@ -164,7 +162,6 @@ def main(
         rm_phi_qty=rm_phi_qty,
         rm_prof_qty=rm_prof_qty,
         mask=peak_mask,
-        plot_stairs=stairs,
         plot_peaks=peaks,
         phase_range=phase_plotlim,
         phi_range=phi_plotlim,

@@ -1,10 +1,20 @@
 import logging
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pkg_resources
+from scipy.integrate import trapezoid
+from scipy.special import erf
 
 import psrutils
 
-__all__ = ["get_offpulse_region"]
+__all__ = [
+    "get_offpulse_region",
+    "get_bias_corrected_pol_profile",
+    "lookup_sigma_pa",
+    "compute_sigma_pa_table",
+    "pa_dist",
+]
 
 
 def get_offpulse_region(
@@ -20,7 +30,7 @@ def get_offpulse_region(
     ----------
     data : `np.ndarray`
         The original pulse profile.
-    windowsize : `np.ndarray`, optional
+    windowsize : `int`, optional
         Window width (in bins) defining the trial regions to integrate. Default: `None`
     logger : `logging.Logger`, optional
         A logger to use. Default: `None`.
@@ -48,3 +58,192 @@ def get_offpulse_region(
     offpulse_win = np.arange(minidx - windowsize // 2, minidx + windowsize // 2) % nbins
 
     return offpulse_win
+
+
+def get_bias_corrected_pol_profile(
+    cube: psrutils.StokesCube, windowsize: int | None = None, logger: logging.Logger | None = None
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Get the Stokes I/L/V/PA profile and correct for bias in the linear
+    polarisation degree and angle.
+
+    Parameters
+    ----------
+    cube : `psrutils.StokesCube`
+        A StokesCube object.
+    windowsize : `int`, optional
+        Window width (in bins) defining the trial regions to integrate. Default: `None`
+    logger : `logging.Logger`, optional
+        A logger to use. Default: `None`.
+
+    Returns
+    -------
+    iquv_profile : `np.ndarray`
+        A 4xN array containing Stokes I/Q/U/V for N bins.
+    l_true : `np.ndarray`
+        A 1xN array containing the debiased Stokes L for N bins.
+    pa : `np.ndarray`
+        A 2xN array containing the position angle value and uncertainty for N bins.
+    sigma_i : `float`
+        The standard deviation of the offpulse noise in the Stokes I profile.
+    """
+    if logger is None:
+        logger = psrutils.get_logger()
+
+    iquv_profile = cube.pol_profile
+
+    # Get the indices of the offpulse bins
+    offpulse_win = psrutils.get_offpulse_region(
+        iquv_profile[0], windowsize=windowsize, logger=logger
+    )
+
+    # Create a profile mask to get the offpulse
+    offpulse_mask = np.full(iquv_profile.shape[1], False)
+    for bin_idx in offpulse_win:
+        offpulse_mask[bin_idx] = True
+
+    # Offpulse Stokes I noise
+    sigma_i = np.std(iquv_profile[0, offpulse_mask])
+
+    # Measured Stokes L
+    l_meas = np.sqrt(iquv_profile[1] ** 2 + iquv_profile[2] ** 2)
+
+    # Bias-corrected Stokes L
+    l_true = np.where(
+        np.abs(l_meas) > np.abs(sigma_i),
+        np.sqrt(np.abs(l_meas**2 - sigma_i**2)),
+        -np.sqrt(np.abs(l_meas**2 - sigma_i**2)),
+    )
+
+    # Bias-corrected fractional degree of linear polarisation
+    p0 = l_true / sigma_i
+
+    # Position angle of linear polarisation
+    # arctan2 is defined on [-pi, pi] radians
+    pa = np.empty(shape=(2, iquv_profile.shape[1]), dtype=np.float64)
+    pa_unc_dist = lookup_sigma_pa(p0)
+    pa[0, :] = 0.5 * np.arctan2(iquv_profile[2], iquv_profile[1])
+    pa[1, :] = np.where(
+        p0 > 10,
+        0.5 / p0,
+        pa_unc_dist,
+    )
+
+    return iquv_profile, l_true, pa, sigma_i
+
+
+def lookup_sigma_pa(p0_meas: np.ndarray) -> np.ndarray:
+    """Get the analytical uncertainty in a position angle measurement given
+    the polarisation measure p0.
+
+    Parameters
+    ----------
+    p0_meas : `np.ndarray`
+        An array of p0 values, where p0 = L_true / sigma_I, L_true is the
+        debiased intensity of linear polarisation and sigma_I is the offpulse
+        noise in the Stokes I profile.
+
+    Returns
+    -------
+    sigma_meas : `np.ndarray`
+        The uncertainties in the position angles in radians.
+    """
+    sigma_pa_table = np.load(pkg_resources.resource_filename("psrutils", "data/sigma_pa_table.npy"))
+    sigma_meas = np.interp(p0_meas, sigma_pa_table[0], sigma_pa_table[1])
+    return sigma_meas
+
+
+def compute_sigma_pa_table(
+    pa_true: float = 0.0,
+    p0_min: float = 0.0,
+    p0_max: float = 10.0,
+    p0_step: float = 0.01,
+    sigma_pa_num: int = 1000,
+    savename: str = "sigma_pa_table",
+    make_plot: bool = False,
+    logger: logging.Logger | None = None,
+) -> None:
+    """Compute the analytical distribution of position angles for an array
+    of polarisation measures between p0_min and p0_max in steps of p0_step.
+    Then find the integration limits that contain 68.26% of the distribution
+    by looping through sigma_pa_num steps and integrating between the PA
+    limits +/-(pi/2)/sigma_pa_num.
+
+    For further details see Naghizadeh-Khouei and Clarke (1993):
+    https://ui.adsabs.harvard.edu/abs/1993A%26A...274..968N/abstract
+
+    Parameters
+    ----------
+    pa_true : `float`, optional
+        The centre of the PA distribution. Default: 0.0.
+    p0_min : `float`, optional
+        The minimum p0 to evaluate at. Default: 0.0.
+    p0_max : `float`, optional
+        The maximum p0 to evaluate at. Default: 10.0.
+    p0_step : `float`, optional
+        The p0 step size. Default: 0.01.
+    sigma_pa_num : `int`, optional
+        The number of steps to use to find sigma_pa. Default: 1000.
+    savename : `str`, optional
+        The name of the output table (without extension). Default: "sigma_pa_table".
+    make_plot : `bool`, optional
+        Make a plot of the results. Default: `False`.
+    logger : `logging.Logger`, optional
+        A logger to use. Default: None.
+    """
+    if logger is None:
+        logger = psrutils.get_logger()
+
+    p0 = np.arange(p0_min, p0_max, p0_step, dtype=np.float64)
+    sigma_pa_table = np.empty(shape=(2, sigma_pa_num), dtype=np.float64)
+    sigma_pa_range = np.linspace(0, np.pi / 2, sigma_pa_num, dtype=np.float64)
+    for ii, ip0 in enumerate(p0):
+        integral_table = np.empty_like(sigma_pa_range)
+        for jj, isigma in enumerate(sigma_pa_range):
+            # Choose a range of PAs to integrate over in the range [-pi, pi)
+            pa_range = np.linspace(pa_true - isigma, pa_true + isigma, 1000, dtype=np.float64)
+            pa_range = (pa_range + np.pi) % (2 * np.pi) - np.pi
+
+            # Numerically integrate over PA range using the trapezoid rule
+            integral_table[jj] = trapezoid(
+                pa_dist(pa_range, np.float64(pa_true), ip0),
+                pa_range,
+            )
+        # Linearly interpolate to find 1-sigma
+        sigma_pa_table[0, ii] = ip0
+        sigma_pa_table[1, ii] = np.interp(0.6826, integral_table, sigma_pa_range)
+
+    if make_plot:
+        fig, ax = plt.subplots(dpi=300, tight_layout=True)
+        ax.errorbar(sigma_pa_table[0], sigma_pa_table[1], fmt="k-", ms=1)
+        logger.info(f"Saving file: {savename}.png")
+        fig.savefig(f"{savename}.png")
+        plt.close()
+
+    logger.info(f"Saving file: {savename}.npy")
+    np.save(savename, sigma_pa_table)
+
+
+def pa_dist(
+    pa: np.ndarray[np.float64], pa_true: np.float64, p0: np.float64
+) -> np.ndarray[np.float64]:
+    """Calculate the position angle distribution for low signal-to-noise ratio
+    measurements. See from Naghizadeh-Khouei and Clarke (1993).
+
+    Parameters
+    ----------
+    pa : `np.ndarray[np.float64]`
+        An array of position angles to evaluate the distribution at.
+    pa_true : `np.float64`
+        The centre of the distribution.
+    p0 : `np.float64`
+        The polarisation measure.
+
+    Returns
+    -------
+    G_pa : `np.ndarray[np.float64]`
+        The distribution evaluated at pa.
+    """
+    k = np.pi ** (-0.5)
+    eta = p0 * 2 ** (-0.5) * np.cos(2 * (pa - pa_true))
+    G_pa = k * (k + eta * np.exp(eta**2) * (1 + erf(eta))) * np.exp(-0.5 * p0**2)
+    return G_pa

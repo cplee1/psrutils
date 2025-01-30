@@ -2,6 +2,7 @@ import logging
 from typing import Tuple
 
 import cmasher as cmr
+import matplotlib as mpl
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
@@ -198,7 +199,6 @@ def plot_2d_fdf(
     rm_phi_qty: tuple | None = None,
     rm_prof_qty: tuple | None = None,
     mask: np.ndarray | None = None,
-    plot_stairs: bool = False,
     plot_peaks: bool = False,
     phase_range: Tuple[float, float] | None = None,
     phi_range: Tuple[float, float] | None = None,
@@ -226,8 +226,6 @@ def plot_2d_fdf(
     mask : `np.ndarray`, optional
         An array of booleans to act as a mask for the measured RM values.
         Default: `None`.
-    plot_stairs : `bool`, optional
-        Plot the profile bins as stairs. Default: `False`.
     plot_peaks : `bool`, optional
         Plot the measure RM and error bars. Default: `False`.
     phase_range : `Tuple[float, float]`, optional
@@ -246,15 +244,19 @@ def plot_2d_fdf(
     if logger is None:
         logger = psrutils.get_logger()
 
-    tmp_archive = cube.archive_clone
     if rm_prof_qty is not None:
-        tmp_archive.set_rotation_measure(rm_prof_qty[0])
-    tmp_archive.fscrunch()
-    tmp_archive.tscrunch()
-    iquv_profile = tmp_archive.get_data()[0, :, 0, :]
-    l_profile = np.sqrt(iquv_profile[1] ** 2 + iquv_profile[2] ** 2)
+        cube.defaraday(rm_prof_qty[0])
 
-    fdf_amp_1D = fdf_amp_2D.mean(0)
+    iquv_prof, l_prof, pa_prof, sigma_i = psrutils.get_bias_corrected_pol_profile(
+        cube, logger=logger
+    )
+    p0 = l_prof / sigma_i
+    pa_prof = np.rad2deg(pa_prof)
+    p0_pa_cutoff = 1
+
+    bin_centres = np.arange(cube.num_bin) / (cube.num_bin - 1)
+
+    fdf_amp_1Dy = fdf_amp_2D.mean(0)
 
     # Styles
     lw = 0.7
@@ -267,70 +269,67 @@ def plot_2d_fdf(
         cmap_name = "arctic_r"
 
     # Define Figure and Axes
-    fig = plt.figure(figsize=(5.5, 5), tight_layout=True, dpi=300)
+    fig = plt.figure(figsize=(6, 6.5), layout="tight", dpi=300)
+
     gs = gridspec.GridSpec(
         ncols=2,
-        nrows=2,
+        nrows=3,
         figure=fig,
-        height_ratios=(1, 3),
-        width_ratios=(3.5, 1),
+        height_ratios=(1, 2.5, 1),
+        width_ratios=(3, 1),
         hspace=0,
         wspace=0,
     )
+
     ax_prof = fig.add_subplot(gs[0, 0])
-    ax_2dfdf = fig.add_subplot(gs[1, 0])
-    ax_1dfdf = fig.add_subplot(gs[1, 1])
+    ax_fdf_1dy = fig.add_subplot(gs[1, 1])
+    ax_fdf_2d = fig.add_subplot(gs[1, 0])
+    ax_pa = fig.add_subplot(gs[2, 0])
 
     # Plot profile
-    if plot_stairs:
-        bin_edges = np.arange(cube.num_bin + 1) / cube.num_bin
-        ax_prof.stairs(iquv_profile[0], bin_edges, color=line_col, zorder=10)
-        ax_prof.stairs(l_profile, bin_edges, color="tab:red", zorder=9)
-        ax_prof.stairs(iquv_profile[3], bin_edges, color="tab:blue", zorder=8)
-    else:
-        bin_centres = np.arange(cube.num_bin) / (cube.num_bin - 1)
-        ax_prof.plot(bin_centres, iquv_profile[0], linewidth=lw, color=line_col, zorder=10)
-        ax_prof.plot(bin_centres, l_profile, linewidth=lw, color="tab:red", zorder=9)
-        ax_prof.plot(bin_centres, iquv_profile[3], linewidth=lw, color="tab:blue", zorder=8)
+    ax_prof.plot(bin_centres, iquv_prof[0], linewidth=lw, color=line_col, zorder=10)
+    ax_prof.plot(bin_centres, l_prof, linewidth=lw, color="tab:red", zorder=9)
+    ax_prof.plot(bin_centres, iquv_prof[3], linewidth=lw, color="tab:blue", zorder=8)
+
     ax_prof.text(
         0.025,
-        0.89,
-        f"{tmp_archive.get_source()}",
+        0.91,
+        f"{cube.source}",
         horizontalalignment="left",
         verticalalignment="top",
         transform=ax_prof.transAxes,
     )
     ax_prof.text(
         0.975,
-        0.89,
-        f"{tmp_archive.get_centre_frequency():.0f} MHz",
+        0.91,
+        f"{cube.ctr_freq:.0f} MHz",
         horizontalalignment="right",
         verticalalignment="top",
         transform=ax_prof.transAxes,
     )
 
-    # Plot 1D FDF
-    ax_1dfdf.plot(fdf_amp_1D, phi, color=line_col, linewidth=lw)
-    xlims = ax_1dfdf.get_xlim()
+    # Plot 1D Y FDF
+    ax_fdf_1dy.plot(fdf_amp_1Dy, phi, color=line_col, linewidth=lw)
+    xlims = ax_fdf_1dy.get_xlim()
     # Plot RM=0 + uncertainty region
     y1 = [0 - rmsf_fwhm / 2.0] * 2
     y2 = [0 + rmsf_fwhm / 2.0] * 2
-    ax_1dfdf.fill_between(xlims, y1, y2, color=line_col, alpha=0.3, zorder=0)
-    ax_1dfdf.axhline(y=0, linestyle="--", color=line_col, linewidth=lw, zorder=1)
+    ax_fdf_1dy.fill_between(xlims, y1, y2, color=line_col, alpha=0.3, zorder=0)
+    ax_fdf_1dy.axhline(y=0, linestyle="--", color=line_col, linewidth=lw, zorder=1)
     # Plot RM_profile + uncertainty region
     if rm_prof_qty is not None:
         if rm_prof_qty[1] is not None:
             y1 = [rm_prof_qty[0] - rm_prof_qty[1]] * 2
             y2 = [rm_prof_qty[0] + rm_prof_qty[1]] * 2
-            ax_1dfdf.fill_between(xlims, y1, y2, color="tab:red", alpha=0.6, zorder=0)
+            ax_fdf_1dy.fill_between(xlims, y1, y2, color="tab:red", alpha=0.6, zorder=0)
         else:
-            ax_1dfdf.axhline(
+            ax_fdf_1dy.axhline(
                 y=rm_prof_qty[0], linestyle="--", color="tab:red", linewidth=lw, zorder=1
             )
 
     # Plot 2D FDF
     cmap = plt.get_cmap(f"cmr.{cmap_name}")
-    ax_2dfdf.imshow(
+    ax_fdf_2d.imshow(
         np.transpose(fdf_amp_2D).astype(float),
         origin="lower",
         extent=(0, 1, phi[0], phi[-1]),
@@ -354,7 +353,7 @@ def plot_2d_fdf(
 
         bin_centres = np.arange(rm_bin.shape[0]) / (rm_bin.shape[0] - 1)
 
-        ax_2dfdf.errorbar(
+        ax_fdf_2d.errorbar(
             x=bin_centres[mask],
             y=rm_bin[mask],
             yerr=rm_bin_unc,
@@ -367,40 +366,62 @@ def plot_2d_fdf(
             capsize=0,
         )
 
-    # Labels
-    ax_2dfdf.set_xlabel("Pulse Phase")
-    ax_2dfdf.set_ylabel("Faraday Depth, $\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+    # Plot PA
+    pa_mask = p0 > p0_pa_cutoff
+    for offset in [0, -180, 180]:
+        ax_pa.errorbar(
+            x=bin_centres[pa_mask],
+            y=pa_prof[0, pa_mask] + offset,
+            yerr=pa_prof[1, pa_mask],
+            color="k",
+            marker="none",
+            ms=1,
+            linestyle="none",
+            elinewidth=0.6,
+            capthick=0.6,
+            capsize=0,
+        )
 
-    # Limits
+    # Phase limits
     if phase_range is None:
         phase_range = [0, 1]
+    for iax in [ax_fdf_2d, ax_pa, ax_prof]:
+        iax.set_xlim(phase_range)
+
+    # Faraday depth limits
     if phi_range is None:
         phi_range = [phi[0], phi[-1]]
-    ax_prof.set_xlim(phase_range)
-    ax_1dfdf.set_xlim(xlims)
-    ax_1dfdf.set_ylim(phi_range)
-    ax_2dfdf.set_xlim(phase_range)
-    ax_2dfdf.set_ylim(phi_range)
+    for iax in [ax_fdf_1dy, ax_fdf_2d]:
+        iax.set_ylim(phi_range)
+
+    # Other limits
+    ax_fdf_1dy.set_xlim(xlims)
+    ax_pa.set_ylim([-120, 120])
 
     # Ticks
     ax_prof.set_yticks([])
-    ax_prof.set_xticklabels([])
-    ax_prof.minorticks_on()
-    ax_prof.tick_params(axis="both", which="both", direction="in")
-    ax_prof.tick_params(axis="both", which="major", length=4)
-    ax_prof.tick_params(axis="both", which="minor", length=2)
+    ax_fdf_1dy.set_xticks([])
+    ax_pa.set_yticks([-90, 0, 90])
+    ax_pa.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
 
-    ax_1dfdf.set_xticks([])
-    ax_1dfdf.set_yticklabels([])
-    ax_1dfdf.minorticks_on()
-    ax_1dfdf.tick_params(axis="both", which="both", direction="in")
-    ax_1dfdf.tick_params(axis="both", which="major", length=4)
-    ax_1dfdf.tick_params(axis="both", which="minor", length=2)
+    for iax in [ax_prof, ax_fdf_2d]:
+        iax.set_xticklabels([])
 
-    ax_2dfdf.minorticks_on()
-    ax_2dfdf.tick_params(axis="both", which="both", right=True, top=True, direction="in")
-    ax_2dfdf.tick_params(axis="both", which="major", length=4)
-    ax_2dfdf.tick_params(axis="both", which="minor", length=2)
+    ax_fdf_1dy.set_yticklabels([])
+
+    ax_pa.tick_params(which="both", right=True, top=True)
+    ax_fdf_2d.tick_params(which="both", right=True, top=True)
+
+    for iax in [ax_prof, ax_fdf_1dy, ax_fdf_2d, ax_pa]:
+        iax.minorticks_on()
+        iax.tick_params(axis="both", which="both", direction="in")
+        iax.tick_params(axis="both", which="major", length=3)
+        iax.tick_params(axis="both", which="minor", length=1.5)
+
+    # Labels
+    ax_pa.set_xlabel("Pulse Phase")
+    ax_pa.set_ylabel("P.A. [deg]")
+    ax_fdf_2d.set_ylabel("Faraday Depth, $\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
 
     logger.info(f"Saving plot file: {savename}.png")
     fig.savefig(savename + ".png")

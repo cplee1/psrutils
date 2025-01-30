@@ -198,6 +198,10 @@ class StokesCube(object):
         """Rotate by a fraction of the pulse phase."""
         self._archive.rotate_phase(phase)
 
+    def defaraday(self, rm: float):
+        """De-Faraday rotate to an RM."""
+        self._archive.set_rotation_measure(rm)
+
     @classmethod
     def from_psrchive(
         cls,

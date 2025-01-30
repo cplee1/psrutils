@@ -29,6 +29,9 @@ pu-rmsynth = "psrutils.apps.rmsynth:main"
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools.package-data]
+psrutils = ["data/*"]
+
 [tool.ruff]
 line-length = 100
 indent-width = 4
