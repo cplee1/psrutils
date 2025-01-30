@@ -50,7 +50,7 @@ def main(archives: tuple, bscr: int, ncols: int, nrows: int) -> None:
             ax.set_xlim([bins[0], bins[-1]])
             psrname = data._archive.get_source()
             ax.set_title(
-                f"{psrs[psrname].Name}\nP={psrs[psrname].P0*1e3:.3f}  DM={psrs[psrname].DM:.2f}",
+                f"{psrs[psrname].Name}\nP={psrs[psrname].P0 * 1e3:.3f}  DM={psrs[psrname].DM:.2f}",
                 fontsize=12,
             )
 
