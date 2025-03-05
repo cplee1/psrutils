@@ -67,11 +67,14 @@ class StokesCube(object):
 
         # Downsample
         if type(tscrunch) is int:
-            self._archive.tscrunch_to_nsub(tscrunch)
+            if tscrunch < self._archive.get_nsubint():
+                self._archive.tscrunch_to_nsub(tscrunch)
         if type(fscrunch) is int:
-            self._archive.fscrunch_to_nchan(fscrunch)
+            if fscrunch < self._archive.get_nchan():
+                self._archive.fscrunch_to_nchan(fscrunch)
         if type(bscrunch) is int:
-            self._archive.bscrunch_to_nbin(bscrunch)
+            if bscrunch < self._archive.get_nbin():
+                self._archive.bscrunch_to_nbin(bscrunch)
 
         # Rotate
         if type(rotate_phase) is float:
