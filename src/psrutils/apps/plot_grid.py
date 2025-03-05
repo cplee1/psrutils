@@ -1,4 +1,5 @@
 import click
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import psrqpy
@@ -24,10 +25,10 @@ def main(archives: tuple, bscr: int, ncols: int, nrows: int) -> None:
     plt.rcParams["text.usetex"] = True
     plt.rcParams["font.family"] = "serif"
     plt.rcParams["font.serif"] = "cm"
-    plt.rcParams["font.size"] = 12
+    plt.rcParams["font.size"] = 14
 
     fig, axes = plt.subplots(
-        figsize=(ncols * 2.1, nrows * 2), ncols=ncols, nrows=nrows, dpi=300, tight_layout=True
+        figsize=(ncols * 2.7, nrows * 2.5), ncols=ncols, nrows=nrows, dpi=300, tight_layout=True
     )
 
     query = psrqpy.QueryATNF()
@@ -36,26 +37,35 @@ def main(archives: tuple, bscr: int, ncols: int, nrows: int) -> None:
 
     for row in range(nrows):
         for col in range(ncols):
-            data = data_list[col + row * ncols]
             ax = axes[row, col]
-            snr = data.snr
-            if snr < 35:
-                data.bscrunch_to_nbin(64)
-            prof = data.profile
-            bins = np.arange(data.num_bin) / (data.num_bin - 1)
-            ax.plot(bins, prof, color="k", linewidth=0.8)
+
             ax.set_yticklabels([])
             ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
             ax.set_xticklabels(["0", "0.25", "0.5", "0.75", "1"])
+
+            ax.minorticks_on()
+            ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(0.05))
+            ax.tick_params(axis="both", which="both", direction="in", top=True, right=True)
+            ax.tick_params(axis="both", which="major", length=4)
+            ax.tick_params(axis="both", which="minor", length=2)
+
+            sp_idx = col + row * ncols
+            if sp_idx >= len(data_list):
+                continue
+            data = data_list[sp_idx]
+
+            prof = data.profile
+            bins = np.arange(data.num_bin) / (data.num_bin - 1)
+            ax.plot(bins, prof, color="k", linewidth=0.6)
             ax.set_xlim([bins[0], bins[-1]])
             psrname = data._archive.get_source()
             ax.set_title(
                 f"{psrs[psrname].Name}\nP={psrs[psrname].P0 * 1e3:.3f}  DM={psrs[psrname].DM:.2f}",
-                fontsize=12,
+                fontsize=14,
             )
 
-    fig.supxlabel("Pulse Phase [rot]")
-    fig.supylabel("Flux Density [arb. units]")
+    # fig.supxlabel("Pulse Phase [rot]")
+    # fig.supylabel("Flux Density [arb. units]")
     fig.savefig("grid.png")
     fig.savefig("grid.pdf")
     plt.close()
