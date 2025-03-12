@@ -155,6 +155,7 @@ def _measure_rm_unc_analytic(fdf_peak_amp: float, rmsf_fwhm: float, noise: np.nd
 def rm_synthesis(
     cube: psrutils.StokesCube,
     phi: np.ndarray,
+    onpulse_win: np.ndarray | None = None,
     norm: str | None = None,
     meas_rm_prof: bool = False,
     meas_rm_scat: bool = False,
@@ -170,6 +171,8 @@ def rm_synthesis(
         A StokesCube object.
     phi : `np.ndarray`
         An array of Faraday depths (in rad/m^2) to compute.
+    onpulse_win : `np.ndarray`
+        A list of bins corresponding to the on-pulse region.
     norm : `str`, optional
         Spectral model subtraction method.
             'mod' - fit a linear model to Stokes I
@@ -278,7 +281,7 @@ def rm_synthesis(
             # Bootstrap RM_prof
             for iter in trange(bootstrap_nsamp):
                 tmp_prof_fdf = np.zeros(len(phi), dtype=np.float64)
-                for bin in range(cube.num_bin):
+                for bin in onpulse_win:
                     S = data[:, :, bin]  # -> dim=(pol,freq)
                     W = np.where(S[0] == 0.0, 0.0, 1.0)  # Uniform weights
                     K = 1.0 / np.sum(W)
@@ -289,7 +292,7 @@ def rm_synthesis(
                     )
                     tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                     tmp_prof_fdf += np.abs(tmp_fdf)
-                tmp_prof_fdf /= cube.num_bin
+                tmp_prof_fdf /= len(onpulse_win)
                 rm_prof_samples[iter], _ = _measure_rm(phi, tmp_prof_fdf)
         else:
             rm_prof_samples, _ = _measure_rm(phi, np.abs(fdf).mean(0))
@@ -316,7 +319,7 @@ def rm_synthesis(
     else:
         rm_scat_samples = None
 
-    return fdf, rmsf, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats
+    return fdf, rmsf, rmsf_phi, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats
 
 
 def _rm_clean_1d(

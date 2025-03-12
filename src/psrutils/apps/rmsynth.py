@@ -1,4 +1,3 @@
-import logging
 from typing import Tuple
 
 import click
@@ -19,6 +18,8 @@ import psrutils
 @click.option("-f", "fscr", type=int, help="Fscrunch to this number of channels.")
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
+@click.option("--w_off", "offpulse_ws", type=int, help="The size of the offpulse window in bins.")
+@click.option("--w_on", "onpulse_ws", type=int, help="The size of the onpulse window in bins.")
 @click.option("--rmlim", type=float, default=100.0, help="RM limit.")
 @click.option("--rmres", type=float, default=0.01, help="RM resolution.")
 @click.option("-n", "nsamp", type=int, help="The number of bootstrap samples.")
@@ -31,6 +32,7 @@ import psrutils
 @click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
 @click.option("--boxplot", is_flag=True, help="Plot RM_phi as boxplots.")
 @click.option("--peaks", is_flag=True, help="Plot RM measurements.")
+@click.option("--plot_onpulse", is_flag=True, help="Shade the on-pulse region.")
 @click.option("--save_pdf", is_flag=True, help="Save as a PDF.")
 @click.option("-d", "dark_mode", is_flag=True, help="Use a dark background.")
 def main(
@@ -39,6 +41,8 @@ def main(
     fscr: int,
     bscr: int,
     rotate: float,
+    offpulse_ws: int,
+    onpulse_ws: int,
     rmlim: float,
     rmres: float,
     nsamp: int,
@@ -49,6 +53,7 @@ def main(
     meas_rm_scat: bool,
     boxplot: bool,
     peaks: bool,
+    plot_onpulse: bool,
     save_pdf: bool,
     dark_mode: bool,
 ) -> None:
@@ -58,12 +63,17 @@ def main(
     logger.info(f"Loading archive: {archive}")
     cube = psrutils.StokesCube.from_psrchive(archive, False, 1, fscr, bscr, rotate)
 
-    # Get offpulse window, assuming offpulse is 1/8 of profile
-    offpulse_win = psrutils.get_offpulse_region(cube.profile, logger=logger)
+    # Get off/on-pulse windows, assuming offpulse is 1/8 of profile
+    offpulse_win = psrutils.get_offpulse_region(cube.profile, windowsize=offpulse_ws, logger=logger)
     logger.debug(f"Offpulse bin indices: {offpulse_win}")
+    logger.info(f"Offpulse window size: {offpulse_win.size}")
+    onpulse_win = psrutils.get_onpulse_region(cube.profile, windowsize=onpulse_ws, logger=logger)
+    logger.debug(f"Onpulse bin indices: {onpulse_win}")
+    logger.info(f"Onpulse window size: {onpulse_win.size}")
     psrutils.plot_profile(
         cube,
         offpulse_win=offpulse_win,
+        onpulse_win=onpulse_win,
         savename=f"{cube.source}_profile",
         save_pdf=save_pdf,
         logger=logger,
@@ -74,13 +84,14 @@ def main(
     rmsyn_result = psrutils.rm_synthesis(
         cube,
         phi,
+        onpulse_win=onpulse_win,
         meas_rm_prof=meas_rm_prof,
         meas_rm_scat=meas_rm_scat,
         bootstrap_nsamp=nsamp,
         offpulse_win=offpulse_win,
         logger=logger,
     )
-    fdf, rmsf, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
+    fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
     logger.info(rm_stats)
 
     if type(nsamp) is int:
@@ -106,8 +117,10 @@ def main(
                 rm_prof_samples_valid = rm_prof_samples[
                     (rm_prof_samples > discard[0]) & (rm_prof_samples < discard[1])
                 ]
+                plot_valid_samples = rm_prof_samples_valid
             else:
                 rm_prof_samples_valid = rm_prof_samples
+                plot_valid_samples = None
             rm_prof_meas = np.mean(rm_prof_samples_valid)
             rm_prof_unc = np.std(rm_prof_samples_valid)
             rm_prof_qty = (rm_prof_meas, rm_prof_unc)
@@ -117,7 +130,7 @@ def main(
 
             psrutils.plotting.plot_rm_hist(
                 rm_prof_samples,
-                valid_samples=rm_prof_samples_valid,
+                valid_samples=plot_valid_samples,
                 range=discard,
                 title=cube.source,
                 savename=f"{cube.source}_rm_prof_hist",
@@ -161,8 +174,10 @@ def main(
         rmsf_fwhm=rm_stats["rmsf_fwhm"],
         rm_phi_qty=rm_phi_qty,
         rm_prof_qty=rm_prof_qty,
+        onpulse_win=onpulse_win,
         mask=peak_mask,
         plot_peaks=peaks,
+        plot_onpulse=plot_onpulse,
         phase_range=phase_plotlim,
         phi_range=phi_plotlim,
         savename=f"{cube.source}_fdf",

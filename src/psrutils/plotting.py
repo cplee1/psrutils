@@ -32,6 +32,7 @@ def plot_profile(
     cube: psrutils.StokesCube,
     pol: int = 0,
     offpulse_win: np.ndarray | None = None,
+    onpulse_win: np.ndarray | None = None,
     savename: str = "profile",
     save_pdf: bool = False,
     logger: logging.Logger | None = None,
@@ -46,6 +47,8 @@ def plot_profile(
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
     offpulse_win : `np.ndarray`, optional
         The bin indices of the offpulse window. Default: `None`.
+    onpulse_win : `np.ndarray`, optional
+        The bin indices of the onpulse window. Default: `None`.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'profile'.
     save_pdf : `bool`, optional
@@ -61,20 +64,41 @@ def plot_profile(
 
     fig, ax = plt.subplots(dpi=300, tight_layout=True)
 
-    edges = np.arange(cube.num_bin + 1) / cube.num_bin
-    ax.stairs(cube.profile, edges, color="k")
-    xlims = [edges[0], edges[-1]]
+    bins = np.arange(cube.num_bin) / cube.num_bin
+    ax.plot(bins, cube.profile, color="k", linewidth=0.8)
+    xlims = [bins[0], bins[-1]]
     ylims = ax.get_ylim()
 
     if offpulse_win is not None:
         offpulse_win = offpulse_win.astype(float) / (cube.num_bin - 1)
         if offpulse_win[0] < offpulse_win[-1]:
             ax.fill_betweenx(
-                ylims, offpulse_win[0], offpulse_win[-1], color="k", alpha=0.5, zorder=0
+                ylims, offpulse_win[0], offpulse_win[-1], color="tab:red", alpha=0.4, zorder=0
             )
         else:
-            ax.fill_betweenx(ylims, offpulse_win[0], xlims[-1], color="k", alpha=0.5, zorder=0)
-            ax.fill_betweenx(ylims, xlims[0], offpulse_win[-1], color="k", alpha=0.5, zorder=0)
+            ax.fill_betweenx(
+                ylims, offpulse_win[0], xlims[-1], color="tab:red", alpha=0.4, zorder=0
+            )
+            ax.fill_betweenx(
+                ylims, xlims[0], offpulse_win[-1], color="tab:red", alpha=0.4, zorder=0
+            )
+
+    if onpulse_win is not None:
+        onpulse_win = onpulse_win.astype(float) / (cube.num_bin - 1)
+        if onpulse_win[0] < onpulse_win[-1]:
+            ax.fill_betweenx(
+                ylims, onpulse_win[0], onpulse_win[-1], color="tab:blue", alpha=0.4, zorder=0
+            )
+        else:
+            ax.fill_betweenx(
+                ylims, onpulse_win[0], xlims[-1], color="tab:blue", alpha=0.4, zorder=0
+            )
+            ax.fill_betweenx(
+                ylims, xlims[0], onpulse_win[-1], color="tab:blue", alpha=0.4, zorder=0
+            )
+
+    # Plot the noise floor
+    ax.axhline(0, linestyle="--", linewidth=0.8, color="k")
 
     ax.set_xlim(xlims)
     ax.set_ylim(ylims)
@@ -198,8 +222,10 @@ def plot_2d_fdf(
     rmsf_fwhm: float,
     rm_phi_qty: tuple | None = None,
     rm_prof_qty: tuple | None = None,
+    onpulse_win: np.ndarray | None = None,
     mask: np.ndarray | None = None,
     plot_peaks: bool = False,
+    plot_onpulse: bool = False,
     phase_range: Tuple[float, float] | None = None,
     phi_range: Tuple[float, float] | None = None,
     savename: str = "fdf",
@@ -228,6 +254,8 @@ def plot_2d_fdf(
         Default: `None`.
     plot_peaks : `bool`, optional
         Plot the measure RM and error bars. Default: `False`.
+    plot_onpulse : `bool`, optional
+        Shade the on-pulse region.
     phase_range : `Tuple[float, float]`, optional
         The phase range in rotations. Default: [0, 1].
     phi_range : `Tuple[float, float]`, optional
@@ -256,7 +284,10 @@ def plot_2d_fdf(
 
     bin_centres = np.arange(cube.num_bin) / (cube.num_bin - 1)
 
-    fdf_amp_1Dy = fdf_amp_2D.mean(0)
+    if onpulse_win is None:
+        fdf_amp_1Dy = fdf_amp_2D.mean(0)
+    else:
+        fdf_amp_1Dy = fdf_amp_2D[onpulse_win].mean(0)
 
     # Styles
     lw = 0.7
@@ -290,7 +321,6 @@ def plot_2d_fdf(
     ax_prof.plot(bin_centres, iquv_prof[0], linewidth=lw, color=line_col, zorder=10)
     ax_prof.plot(bin_centres, l_prof, linewidth=lw, color="tab:red", zorder=9)
     ax_prof.plot(bin_centres, iquv_prof[3], linewidth=lw, color="tab:blue", zorder=8)
-
     ax_prof.text(
         0.025,
         0.91,
@@ -307,6 +337,21 @@ def plot_2d_fdf(
         verticalalignment="top",
         transform=ax_prof.transAxes,
     )
+    if onpulse_win is not None and plot_onpulse:
+        ylims = ax_prof.get_ylim()
+        onpulse_win = onpulse_win.astype(float) / (cube.num_bin - 1)
+        if onpulse_win[0] < onpulse_win[-1]:
+            ax_prof.fill_betweenx(
+                ylims, onpulse_win[0], onpulse_win[-1], color="tab:blue", alpha=0.3, zorder=0
+            )
+        else:
+            ax_prof.fill_betweenx(
+                ylims, onpulse_win[0], bin_centres[-1], color="tab:blue", alpha=0.2, zorder=0
+            )
+            ax_prof.fill_betweenx(
+                ylims, bin_centres[0], onpulse_win[-1], color="tab:blue", alpha=0.2, zorder=0
+            )
+        ax_prof.set_ylim(ylims)
 
     # Plot 1D Y FDF
     ax_fdf_1dy.plot(fdf_amp_1Dy, phi, color=line_col, linewidth=lw)
@@ -314,14 +359,14 @@ def plot_2d_fdf(
     # Plot RM=0 + uncertainty region
     y1 = [0 - rmsf_fwhm / 2.0] * 2
     y2 = [0 + rmsf_fwhm / 2.0] * 2
-    ax_fdf_1dy.fill_between(xlims, y1, y2, color=line_col, alpha=0.3, zorder=0)
+    ax_fdf_1dy.fill_between(xlims, y1, y2, color=line_col, alpha=0.2, zorder=0)
     ax_fdf_1dy.axhline(y=0, linestyle="--", color=line_col, linewidth=lw, zorder=1)
     # Plot RM_profile + uncertainty region
     if rm_prof_qty is not None:
         if rm_prof_qty[1] is not None:
             y1 = [rm_prof_qty[0] - rm_prof_qty[1]] * 2
             y2 = [rm_prof_qty[0] + rm_prof_qty[1]] * 2
-            ax_fdf_1dy.fill_between(xlims, y1, y2, color="tab:red", alpha=0.6, zorder=0)
+            ax_fdf_1dy.fill_between(xlims, y1, y2, color="tab:red", alpha=0.5, zorder=0)
         else:
             ax_fdf_1dy.axhline(
                 y=rm_prof_qty[0], linestyle="--", color="tab:red", linewidth=lw, zorder=1
