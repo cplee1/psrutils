@@ -13,6 +13,7 @@ import psrutils
 
 __all__ = [
     "plot_profile",
+    "plot_pol_profile",
     "plot_freq_phase",
     "plot_time_phase",
     "plot_2d_fdf",
@@ -104,6 +105,123 @@ def plot_profile(
     ax.set_ylim(ylims)
     ax.set_xlabel("Pulse Phase")
     ax.set_ylabel("Flux Density [arb. units]")
+
+    logger.info(f"Saving plot file: {savename}.png")
+    fig.savefig(savename + ".png")
+
+    if save_pdf:
+        logger.info(f"Saving plot file: {savename}.pdf")
+        fig.savefig(savename + ".pdf")
+
+    plt.close()
+
+
+def plot_pol_profile(
+    cube: psrutils.StokesCube,
+    phase_range: Tuple[float, float] | None = None,
+    savename: str = "pol_profile",
+    save_pdf: bool = False,
+    logger: logging.Logger | None = None,
+) -> None:
+    """Create a plot of integrated flux density vs phase for a specified polarisation.
+
+    Parameters
+    ----------
+    cube : `psrutils.StokesCube`
+        A StokesCube object.
+    phase_range : `Tuple[float, float]`, optional
+        The phase range in rotations. Default: [0, 1].
+    savename : `str`, optional
+        The name of the plot file excluding the extension. Default: 'pol_profile'.
+    save_pdf : `bool`, optional
+        Save the plot as a pdf? Default: `False`.
+    logger : logging.Logger, optional
+        A logger to use. Default: `None`.
+    """
+    if logger is None:
+        logger = psrutils.get_logger()
+
+    iquv_prof, l_prof, pa_prof, sigma_i = psrutils.get_bias_corrected_pol_profile(
+        cube, logger=logger
+    )
+    p0 = l_prof / sigma_i
+    pa_prof = np.rad2deg(pa_prof)
+    p0_pa_cutoff = 1
+
+    norm_val = np.max(iquv_prof[0])
+    iquv_prof /= norm_val
+    l_prof /= norm_val
+
+    bin_centres = np.arange(cube.num_bin) / (cube.num_bin - 1)
+
+    # Define Figure and Axes
+    fig = plt.figure(figsize=(5, 4), layout="tight", dpi=300)
+
+    gs = gridspec.GridSpec(ncols=1, nrows=2, figure=fig, height_ratios=(1, 2), hspace=0)
+
+    ax_pa = fig.add_subplot(gs[0])
+    ax_prof = fig.add_subplot(gs[1])
+
+    lw = 0.55
+
+    ax_prof.plot(bin_centres, iquv_prof[0], linewidth=lw, color="k", zorder=10)
+    ax_prof.plot(bin_centres, l_prof, linewidth=lw, color="tab:red", zorder=9)
+    ax_prof.plot(bin_centres, iquv_prof[3], linewidth=lw, color="tab:blue", zorder=8)
+    ax_prof.text(
+        0.025,
+        0.95,
+        f"{cube.source}",
+        horizontalalignment="left",
+        verticalalignment="top",
+        transform=ax_prof.transAxes,
+    )
+    ax_prof.text(
+        0.975,
+        0.95,
+        f"{cube.ctr_freq:.0f} MHz",
+        horizontalalignment="right",
+        verticalalignment="top",
+        transform=ax_prof.transAxes,
+    )
+
+    # Plot PA
+    pa_mask = p0 > p0_pa_cutoff
+    for offset in [0, -180, 180]:
+        ax_pa.errorbar(
+            x=bin_centres[pa_mask],
+            y=pa_prof[0, pa_mask] + offset,
+            yerr=pa_prof[1, pa_mask],
+            color="k",
+            marker="none",
+            ms=1,
+            linestyle="none",
+            elinewidth=lw,
+            capthick=lw,
+            capsize=0,
+        )
+
+    # Limits
+    if phase_range is None:
+        phase_range = [0, 1]
+    for iax in [ax_pa, ax_prof]:
+        iax.set_xlim(phase_range)
+    ax_pa.set_ylim([-120, 120])
+
+    # Ticks
+    ax_pa.set_xticklabels([])
+    ax_pa.set_yticks([-90, 0, 90])
+    ax_pa.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
+    ax_pa.tick_params(which="both", right=True, top=True)
+    ax_prof.tick_params(which="both", right=True, top=True)
+    for iax in [ax_pa, ax_prof]:
+        iax.minorticks_on()
+        iax.tick_params(axis="both", which="both", direction="in")
+        iax.tick_params(axis="both", which="major", length=4)
+        iax.tick_params(axis="both", which="minor", length=2)
+
+    ax_prof.set_xlabel("Pulse Phase")
+    ax_prof.set_ylabel("Normalised Flux Density")
+    ax_pa.set_ylabel("P.A. [deg]")
 
     logger.info(f"Saving plot file: {savename}.png")
     fig.savefig(savename + ".png")

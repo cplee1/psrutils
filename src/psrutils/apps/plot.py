@@ -1,4 +1,4 @@
-import logging
+from typing import Tuple
 
 import click
 
@@ -17,18 +17,22 @@ import psrutils
 @click.option("-Y", "plot_tvsp", is_flag=True, help="Plot a time vs phase.")
 @click.option("-G", "plot_fvsp", is_flag=True, help="Plot a frequency vs phase.")
 @click.option("-D", "plot_prof", is_flag=True, help="Plot a pulse profile.")
+@click.option("-S", "plot_pol_prof", is_flag=True, help="Plot a full-Stokes pulse profile.")
 @click.option("-t", "tscr", type=int, help="Tscrunch to this number of sub-integrations.")
 @click.option("-f", "fscr", type=int, help="Fscrunch to this number of channels.")
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
+@click.option("--phase_plotlim", type=float, nargs=2, help="Plot limits in rotations.")
 def main(
     archive: str,
     log_level: str,
     plot_tvsp: bool,
     plot_fvsp: bool,
     plot_prof: bool,
+    plot_pol_prof: bool,
     tscr: int,
     fscr: int,
     bscr: int,
+    phase_plotlim: Tuple[float, float],
 ) -> None:
     log_level_dict = psrutils.get_log_levels()
     logger = psrutils.get_logger(log_level=log_level_dict[log_level])
@@ -44,3 +48,6 @@ def main(
     if plot_prof:
         click.echo("Plotting profile")
         psrutils.plotting.plot_profile(cube, logger=logger)
+    if plot_pol_prof:
+        click.echo("Plotting polarisation profile")
+        psrutils.plotting.plot_pol_profile(cube, phase_range=phase_plotlim, logger=logger)
