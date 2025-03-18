@@ -21,6 +21,7 @@ import psrutils
 @click.option("-t", "tscr", type=int, help="Tscrunch to this number of sub-integrations.")
 @click.option("-f", "fscr", type=int, help="Fscrunch to this number of channels.")
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
+@click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
 @click.option("--phase_plotlim", type=float, nargs=2, help="Plot limits in rotations.")
 def main(
     archive: str,
@@ -32,12 +33,15 @@ def main(
     tscr: int,
     fscr: int,
     bscr: int,
+    rotate: float,
     phase_plotlim: Tuple[float, float],
 ) -> None:
     log_level_dict = psrutils.get_log_levels()
     logger = psrutils.get_logger(log_level=log_level_dict[log_level])
 
-    cube = psrutils.StokesCube.from_psrchive(archive, tscr, fscr, bscr)
+    cube = psrutils.StokesCube.from_psrchive(
+        archive, clone=False, tscrunch=tscr, fscrunch=fscr, bscrunch=bscr, rotate_phase=rotate
+    )
 
     if plot_tvsp:
         click.echo("Plotting time vs phase")
