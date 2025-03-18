@@ -98,7 +98,7 @@ def main(
         rm_phi_meas = np.mean(rm_phi_samples, axis=1)
         rm_phi_unc = np.std(rm_phi_samples, axis=1)
         rm_phi_qty = (rm_phi_meas, rm_phi_unc)
-        peak_mask = np.where(rm_phi_unc < 1, True, False)
+        peak_mask = np.where(rm_phi_unc < 1.25, True, False)
 
         with open(f"{cube.source}_rm_phi.csv", "w") as f:
             for meas, unc in zip(rm_phi_meas, rm_phi_unc):
