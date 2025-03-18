@@ -130,6 +130,11 @@ class StokesCube(object):
         return self._archive.get_nbin()
 
     @property
+    def num_pol(self):
+        """The number of instrumental polarisations."""
+        return self._archive.get_npol()
+
+    @property
     def archive(self):
         """A reference to the stored PSRCHIVE archive object."""
         return self._archive
