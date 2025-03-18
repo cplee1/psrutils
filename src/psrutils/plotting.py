@@ -13,6 +13,7 @@ from matplotlib.axes import Axes
 import psrutils
 
 __all__ = [
+    "add_profile_to_axes",
     "plot_profile",
     "plot_pol_profile",
     "plot_freq_phase",
@@ -30,49 +31,60 @@ plt.rcParams["font.serif"] = "cm"
 plt.rcParams["font.size"] = 12
 
 
-def _add_pol_profile_to_figure(
+def add_profile_to_axes(
     cube: psrutils.StokesCube,
-    ax_pa: Axes,
-    ax_prof: Axes,
+    ax_pa: Axes | None = None,
+    ax_prof: Axes | None = None,
     normalise_bins: bool = True,
     normalise_flux: bool = True,
+    plot_pol: bool = True,
     p0_pa_cutoff: float = 1.0,
+    voffset: float = 0.0,
     lw: float = 0.55,
     logger: logging.Logger | None = None,
-):
-    iquv_prof, l_prof, pa_prof, sigma_i = psrutils.get_bias_corrected_pol_profile(
-        cube, logger=logger
-    )
-    p0 = l_prof / sigma_i
-    pa_prof = np.rad2deg(pa_prof)
+) -> None:
+    if plot_pol:
+        iquv_prof, l_prof, pa_prof, sigma_i = psrutils.get_bias_corrected_pol_profile(
+            cube, logger=logger
+        )
+        p0 = l_prof / sigma_i
+        pa_prof = np.rad2deg(pa_prof)
+    else:
+        iquv_prof = cube.pol_profile
 
     if normalise_flux:
         peak_flux = np.max(iquv_prof[0])
         iquv_prof /= peak_flux
-        l_prof /= peak_flux
+        if plot_pol:
+            l_prof /= peak_flux
 
     bin_centres = np.arange(cube.num_bin, dtype=np.float64)
     if normalise_bins:
         bin_centres /= cube.num_bin - 1
 
-    ax_prof.plot(bin_centres, iquv_prof[0], linewidth=lw, color="k", zorder=10)
-    ax_prof.plot(bin_centres, l_prof, linewidth=lw, color="tab:red", zorder=9)
-    ax_prof.plot(bin_centres, iquv_prof[3], linewidth=lw, color="tab:blue", zorder=8)
+    if ax_prof is not None:
+        ax_prof.plot(bin_centres, iquv_prof[0] + voffset, linewidth=lw, color="k", zorder=10)
+        if plot_pol:
+            ax_prof.plot(bin_centres, l_prof + voffset, linewidth=lw, color="tab:red", zorder=9)
+            ax_prof.plot(
+                bin_centres, iquv_prof[3] + voffset, linewidth=lw, color="tab:blue", zorder=8
+            )
 
-    pa_mask = p0 > p0_pa_cutoff
-    for offset in [0, -180, 180]:
-        ax_pa.errorbar(
-            x=bin_centres[pa_mask],
-            y=pa_prof[0, pa_mask] + offset,
-            yerr=pa_prof[1, pa_mask],
-            color="k",
-            marker="none",
-            ms=1,
-            linestyle="none",
-            elinewidth=lw,
-            capthick=lw,
-            capsize=0,
-        )
+    if ax_pa is not None and plot_pol:
+        pa_mask = p0 > p0_pa_cutoff
+        for offset in [0, -180, 180]:
+            ax_pa.errorbar(
+                x=bin_centres[pa_mask],
+                y=pa_prof[0, pa_mask] + offset,
+                yerr=pa_prof[1, pa_mask],
+                color="k",
+                marker="none",
+                ms=1,
+                linestyle="none",
+                elinewidth=lw,
+                capthick=lw,
+                capsize=0,
+            )
 
 
 def plot_profile(
@@ -194,7 +206,7 @@ def plot_pol_profile(
     ax_prof = fig.add_subplot(gs[1])
 
     # Add data to axes
-    _add_pol_profile_to_figure(cube, ax_pa, ax_prof, logger=logger)
+    psrutils.add_profile_to_axes(cube, ax_pa, ax_prof, logger=logger)
 
     # Add text to profile to axis
     ax_prof.text(
@@ -415,7 +427,7 @@ def plot_2d_fdf(
     )
     p0 = l_prof / sigma_i
     pa_prof = np.rad2deg(pa_prof)
-    p0_pa_cutoff = 1
+    p0_pa_cutoff = 3
 
     bin_centres = np.arange(cube.num_bin) / (cube.num_bin - 1)
 
@@ -425,7 +437,7 @@ def plot_2d_fdf(
         fdf_amp_1Dy = fdf_amp_2D[onpulse_win].mean(0)
 
     # Styles
-    lw = 0.7
+    lw = 0.6
     if dark_mode:
         plt.style.use("dark_background")
         line_col = "w"
@@ -524,6 +536,9 @@ def plot_2d_fdf(
         if mask is None:
             mask = np.full(rm_bin.shape[0], True)
 
+        l_mask = l_prof / sigma_i > 3
+        mask = mask & l_mask
+
         if rm_phi_qty[1] is not None:
             rm_bin_unc = np.abs(rm_phi_qty[1])[mask]
             marker = "none"
@@ -541,8 +556,8 @@ def plot_2d_fdf(
             marker=marker,
             ms=1,
             linestyle="none",
-            elinewidth=0.6,
-            capthick=0.6,
+            elinewidth=lw,
+            capthick=lw,
             capsize=0,
         )
 
@@ -557,8 +572,8 @@ def plot_2d_fdf(
             marker="none",
             ms=1,
             linestyle="none",
-            elinewidth=0.6,
-            capthick=0.6,
+            elinewidth=lw,
+            capthick=lw,
             capsize=0,
         )
 

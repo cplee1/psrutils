@@ -11,7 +11,8 @@ import psrutils
 @click.option("-c", "ncols", type=int, help="Number of columns.")
 @click.option("-r", "nrows", type=int, help="Number of rows.")
 @click.option("-s", "spacing", type=float, default=1.2, help="Vertical spacing.")
-def main(spec_files: tuple, ncols: int, nrows: int, spacing: float) -> None:
+@click.option("-l", "plot_ctrline", is_flag=True, help="Plot a centre line.")
+def main(spec_files: tuple, ncols: int, nrows: int, spacing: float, plot_ctrline: bool) -> None:
     if ncols * nrows < len(spec_files):
         raise ValueError("To few subplots for the provided archives.")
 
@@ -33,19 +34,27 @@ def main(spec_files: tuple, ncols: int, nrows: int, spacing: float) -> None:
     print(f"Using PSRCAT v{query.get_version}")
     psrs = query.get_pulsars()
 
+    lw = 0.45
+
     for ii, spec_file in enumerate(spec_files):
         spec = np.loadtxt(spec_file, dtype=str, delimiter=",")
 
-        data_list = []
+        cube_list = []
         telescope_list = []
         for archive, shift, bscr, telescope in spec:
             if bscr != "":
                 bscr = int(bscr)
             else:
                 bscr = None
-            tmp_data = psrutils.StokesCube.from_psrchive(str(archive), False, 1, 1, bscr)
-            tmp_data.rotate_phase(np.float64(shift))
-            data_list.append(tmp_data)
+            tmp_cube = psrutils.StokesCube.from_psrchive(
+                str(archive),
+                clone=False,
+                tscrunch=1,
+                fscrunch=1,
+                bscrunch=bscr,
+                rotate_phase=float(shift),
+            )
+            cube_list.append(tmp_cube)
             telescope_list.append(telescope)
 
         col = ii % ncols
@@ -60,17 +69,17 @@ def main(spec_files: tuple, ncols: int, nrows: int, spacing: float) -> None:
         else:
             ax = axes[row, col]
 
-        for jj, (data, tele) in enumerate(zip(data_list, telescope_list)):
-            prof = data.profile / np.max(data.profile)
-            bins = np.arange(data.num_bin) / (data.num_bin - 1)
-            if tele == "MWA":
-                color = "tab:blue"
+        for jj, (cube, tele) in enumerate(zip(cube_list, telescope_list)):
+            if cube.num_pol == 4:
+                psrutils.add_profile_to_axes(
+                    cube, ax_prof=ax, voffset=jj * spacing, plot_pol=True, lw=lw
+                )
             else:
-                color = "k"
-            ax.plot(bins, prof + jj * spacing, color=color, linewidth=0.6)
-            # ax.axhline(jj * spacing, linestyle="--", color="k", linewidth=0.5, alpha=0.5)
-            minfreq = f"{data.min_freq:.0f}"
-            maxfreq = f"{data.max_freq:.0f}"
+                psrutils.add_profile_to_axes(
+                    cube, ax_prof=ax, voffset=jj * spacing, plot_pol=False, lw=lw
+                )
+            minfreq = f"{cube.min_freq:.0f}"
+            maxfreq = f"{cube.max_freq:.0f}"
             if minfreq == maxfreq:
                 label = f"{minfreq} MHz"
             else:
@@ -86,19 +95,20 @@ def main(spec_files: tuple, ncols: int, nrows: int, spacing: float) -> None:
             ax.set_yticklabels([])
             ax.set_xticks([0, 0.25, 0.5, 0.75, 1])
             ax.set_xticklabels(["0", "0.25", "0.5", "0.75", "1"])
-            ax.set_xlim([bins[0], bins[-1]])
+            ax.set_xlim([0, 1])
             ax.set_yticks([])
 
-        ax.axvline(0.5, linestyle=(0, (1, 4)), color="k", linewidth=0.6, alpha=1)
+        if plot_ctrline:
+            ax.axvline(0.5, linestyle="-", color="k", linewidth=lw, alpha=0.4)
 
-        psrname = data._archive.get_source()
+        psrname = cube_list[0]._archive.get_source()
         ax.set_title(
             # f"{psrs[psrname].Name}\nP={psrs[psrname].P0*1e3:.3f}  DM={psrs[psrname].DM:.2f}",
             f"{psrs[psrname].Name}",
             fontsize=14,
         )
 
-    fig.supxlabel("Pulse Phase")
+    # fig.supxlabel("Pulse Phase")
     # fig.supylabel("Flux Density [arb. units]")
     fig.savefig("stack.png")
     fig.savefig("stack.pdf")
