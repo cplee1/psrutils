@@ -25,10 +25,10 @@ def main(archives: tuple, bscr: int, ncols: int, nrows: int) -> None:
     plt.rcParams["text.usetex"] = True
     plt.rcParams["font.family"] = "serif"
     plt.rcParams["font.serif"] = "cm"
-    plt.rcParams["font.size"] = 14
+    plt.rcParams["font.size"] = 15
 
     fig, axes = plt.subplots(
-        figsize=(ncols * 2.7, nrows * 2.5), ncols=ncols, nrows=nrows, dpi=300, tight_layout=True
+        figsize=(ncols * 3.1, nrows * 2.5), ncols=ncols, nrows=nrows, dpi=300, tight_layout=True
     )
 
     query = psrqpy.QueryATNF()
@@ -59,9 +59,23 @@ def main(archives: tuple, bscr: int, ncols: int, nrows: int) -> None:
             ax.plot(bins, prof, color="k", linewidth=0.6)
             ax.set_xlim([bins[0], bins[-1]])
             psrname = data._archive.get_source()
-            ax.set_title(
-                f"{psrs[psrname].Name}\nP={psrs[psrname].P0 * 1e3:.3f}  DM={psrs[psrname].DM:.2f}",
-                fontsize=14,
+            ax.text(
+                0.025,
+                1.05,
+                # f"{psrs[psrname].Name}\n$N_\mathrm{{bin}}={data.num_bin}$",
+                f"{psrs[psrname].Name}",
+                horizontalalignment="left",
+                verticalalignment="bottom",
+                transform=ax.transAxes,
+            )
+            ax.text(
+                0.975,
+                1.05,
+                # f"P={psrs[psrname].P0 * 1e3:.2f} ms\nDM={psrs[psrname].DM:.2f} cm$^-3$ pc",
+                f"P={psrs[psrname].P0 * 1e3:.3f} ms",
+                horizontalalignment="right",
+                verticalalignment="bottom",
+                transform=ax.transAxes,
             )
 
     # fig.supxlabel("Pulse Phase [rot]")
