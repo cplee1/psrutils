@@ -1,5 +1,3 @@
-from typing import Union
-
 import psrchive
 
 from psrutils import C0
@@ -213,7 +211,7 @@ class StokesCube(object):
     @classmethod
     def from_psrchive(
         cls,
-        archive: Union[str, psrchive.Archive],
+        archive: str | psrchive.Archive,
         clone: bool = False,
         tscrunch: int | None = None,
         fscrunch: int | None = None,
