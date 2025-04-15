@@ -35,6 +35,7 @@ import psrutils
 @click.option("--peaks", is_flag=True, help="Plot RM measurements.")
 @click.option("--plot_onpulse", is_flag=True, help="Shade the on-pulse region.")
 @click.option("--plot_pa", is_flag=True, help="Plot the position angle.")
+@click.option("--plot_pol_prof", is_flag=True, help="Plot the full polarisation profile.")
 @click.option("--save_pdf", is_flag=True, help="Save as a PDF.")
 @click.option("-d", "dark_mode", is_flag=True, help="Use a dark background.")
 def main(
@@ -58,6 +59,7 @@ def main(
     peaks: bool,
     plot_onpulse: bool,
     plot_pa: bool,
+    plot_pol_prof: bool,
     save_pdf: bool,
     dark_mode: bool,
 ) -> None:
@@ -179,7 +181,7 @@ def main(
         rm_phi_qty=rm_phi_qty,
         rm_prof_qty=rm_prof_qty,
         onpulse_win=onpulse_win,
-        mask=peak_mask,
+        rm_mask=peak_mask,
         plot_peaks=peaks,
         plot_onpulse=plot_onpulse,
         plot_pa=plot_pa,
@@ -191,3 +193,18 @@ def main(
         dark_mode=dark_mode,
         logger=logger,
     )
+
+    if plot_pol_prof:
+        psrutils.plotting.plot_pol_profile(
+            cube,
+            rmsf_fwhm=rm_stats["rmsf_fwhm"],
+            rm_phi_qty=rm_phi_qty,
+            rm_prof_qty=rm_prof_qty,
+            rm_mask=peak_mask,
+            phase_range=phase_plotlim,
+            p0_cutoff=p0_cutoff,
+            savename=f"{cube.source}_pol_profile",
+            save_pdf=save_pdf,
+            save_data=True,
+            logger=logger,
+        )

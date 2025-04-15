@@ -35,22 +35,20 @@ def add_profile_to_axes(
     cube: psrutils.StokesCube,
     ax_pa: Axes | None = None,
     ax_prof: Axes | None = None,
-    normalise_bins: bool = True,
     normalise_flux: bool = True,
     plot_pol: bool = True,
-    p0_pa_cutoff: float = 1.0,
+    p0_cutoff: float | None = 3.0,
     voffset: float = 0.0,
     lw: float = 0.55,
     logger: logging.Logger | None = None,
-) -> None:
+) -> tuple[np.ndarray, tuple]:
     if plot_pol:
-        iquv_prof, l_prof, pa_prof, sigma_i = psrutils.get_bias_corrected_pol_profile(
-            cube, logger=logger
-        )
-        p0 = l_prof / sigma_i
-        pa_prof = np.rad2deg(pa_prof)
+        profile_data = psrutils.get_bias_corrected_pol_profile(cube, logger=logger)
+        iquv_prof, l_prof, pa, p0, _ = profile_data
     else:
         iquv_prof = cube.pol_profile
+
+    bins = np.arange(cube.num_bin) / (cube.num_bin - 1)
 
     if normalise_flux:
         peak_flux = np.max(iquv_prof[0])
@@ -58,25 +56,28 @@ def add_profile_to_axes(
         if plot_pol:
             l_prof /= peak_flux
 
-    bin_centres = np.arange(cube.num_bin, dtype=np.float64)
-    if normalise_bins:
-        bin_centres /= cube.num_bin - 1
-
     if ax_prof is not None:
-        ax_prof.plot(bin_centres, iquv_prof[0] + voffset, linewidth=lw, color="k", zorder=10)
+        ax_prof.plot(bins, iquv_prof[0] + voffset, linewidth=lw, linestyle="-", color="k", zorder=8)
         if plot_pol:
-            ax_prof.plot(bin_centres, l_prof + voffset, linewidth=lw, color="tab:red", zorder=9)
             ax_prof.plot(
-                bin_centres, iquv_prof[3] + voffset, linewidth=lw, color="tab:blue", zorder=8
+                bins, l_prof + voffset, linewidth=lw, linestyle="--", color="tab:red", zorder=10
+            )
+            ax_prof.plot(
+                bins,
+                iquv_prof[3] + voffset,
+                linewidth=lw,
+                linestyle=":",
+                color="tab:blue",
+                zorder=9,
             )
 
     if ax_pa is not None and plot_pol:
-        pa_mask = p0 > p0_pa_cutoff
+        pa_mask = p0 > p0_cutoff
         for offset in [0, -180, 180]:
             ax_pa.errorbar(
-                x=bin_centres[pa_mask],
-                y=pa_prof[0, pa_mask] + offset,
-                yerr=pa_prof[1, pa_mask],
+                x=bins[pa_mask],
+                y=pa[0, pa_mask] + offset,
+                yerr=pa[1, pa_mask],
                 color="k",
                 marker="none",
                 ms=1,
@@ -85,6 +86,7 @@ def add_profile_to_axes(
                 capthick=lw,
                 capsize=0,
             )
+    return bins, profile_data
 
 
 def plot_profile(
@@ -176,9 +178,15 @@ def plot_profile(
 
 def plot_pol_profile(
     cube: psrutils.StokesCube,
+    rmsf_fwhm: float | None = None,
+    rm_phi_qty: tuple | None = None,
+    rm_prof_qty: tuple | None = None,
+    rm_mask: np.ndarray | None = None,
     phase_range: Tuple[float, float] | None = None,
+    p0_cutoff: float | None = 3.0,
     savename: str = "pol_profile",
     save_pdf: bool = False,
+    save_data: bool = False,
     logger: logging.Logger | None = None,
 ) -> None:
     """Create a plot of integrated flux density vs phase for a specified polarisation.
@@ -187,30 +195,123 @@ def plot_pol_profile(
     ----------
     cube : `psrutils.StokesCube`
         A StokesCube object.
+    rmsf_fwhm : `float`, optional
+        The FWHM of the RM spread function. Default: `None`.
+    rm_phi_qty : `Tuple[np.ndarray, np.ndarray]`, optional
+        The RM measurements and uncertainties for each phase bin. Default: `None`.
+    rm_prof_qty : `Tuple[float, float]`, optional
+        The RM measurement and uncertainty for the profile. Default: `None`.
+    rm_mask : `np.ndarray`, optional
+        An array of booleans to act as a mask for the measured RM values.
+        Default: `None`.
     phase_range : `Tuple[float, float]`, optional
         The phase range in rotations. Default: [0, 1].
+    p0_cutoff : `float`, optional
+        Mask all RM and PA measurements below this polarisation measure. If `None` is
+        specified then no mask will be applied. Default: 3.0.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'pol_profile'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
+    save_data : `bool`, optional
+        Save the plot data? Default: `False`.
     logger : logging.Logger, optional
         A logger to use. Default: `None`.
     """
     if logger is None:
         logger = psrutils.get_logger()
 
-    # Define Figure and Axes
-    fig = plt.figure(figsize=(5, 4), layout="tight", dpi=300)
-    gs = gridspec.GridSpec(ncols=1, nrows=2, figure=fig, height_ratios=(1, 2), hspace=0)
-    ax_pa = fig.add_subplot(gs[0])
-    ax_prof = fig.add_subplot(gs[1])
+    if rm_prof_qty is not None:
+        cube.defaraday(rm_prof_qty[0])
 
-    # Add data to axes
-    psrutils.add_profile_to_axes(cube, ax_pa, ax_prof, logger=logger)
+    plot_rm = False
+    if rm_phi_qty is not None:
+        plot_rm = True
+
+    # Define Figure and Axes
+    if plot_rm:
+        fig = plt.figure(figsize=(6, 5.6), layout="tight", dpi=300)
+        gs = gridspec.GridSpec(ncols=1, nrows=3, figure=fig, height_ratios=(1, 1, 3), hspace=0)
+        ax_rm = fig.add_subplot(gs[0])
+        ax_pa = fig.add_subplot(gs[1])
+        ax_prof = fig.add_subplot(gs[2])
+    else:
+        fig = plt.figure(figsize=(5, 4), layout="tight", dpi=300)
+        gs = gridspec.GridSpec(ncols=1, nrows=2, figure=fig, height_ratios=(1, 2), hspace=0)
+        ax_rm = None
+        ax_pa = fig.add_subplot(gs[0])
+        ax_prof = fig.add_subplot(gs[1])
+
+    # Styles
+    lw = 0.6
+    line_col = "k"
+
+    # Phase range to plot
+    if phase_range is None:
+        phase_range = [0, 1]
+
+    # Add flux and PA
+    bins, profile_data = psrutils.add_profile_to_axes(
+        cube, ax_pa=ax_pa, ax_prof=ax_prof, p0_cutoff=p0_cutoff, lw=lw, logger=logger
+    )
+    iquv_prof, l_prof, pa_prof, p0, _ = profile_data
+
+    # Add RM
+    if plot_rm:
+        if rm_mask is None:
+            rm_mask = np.full(rm_phi_qty[0].shape[0], True)
+
+        full_rm_mask = rm_mask & (p0 > p0_cutoff)
+
+        if rm_phi_qty[1] is not None:
+            rm_phi_unc = np.abs(rm_phi_qty[1])[full_rm_mask]
+            marker = "none"
+        else:
+            rm_phi_unc = None
+            marker = "o"
+
+        ax_rm.errorbar(
+            x=bins[full_rm_mask],
+            y=rm_phi_qty[0][full_rm_mask],
+            yerr=rm_phi_unc,
+            color="k",
+            marker=marker,
+            ms=1,
+            linestyle="none",
+            elinewidth=lw,
+            capthick=lw,
+            capsize=0,
+        )
+
+        # Plot RM_profile + uncertainty region
+        if rm_prof_qty is not None:
+            if rm_prof_qty[1] is not None:
+                y1 = [rm_prof_qty[0] - rm_prof_qty[1]] * 2
+                y2 = [rm_prof_qty[0] + rm_prof_qty[1]] * 2
+                ax_rm.fill_between(phase_range, y1, y2, color="tab:red", alpha=0.5, zorder=0)
+            else:
+                ax_rm.axhline(
+                    y=rm_prof_qty[0], linestyle="--", color="tab:red", linewidth=lw, zorder=1
+                )
+
+        rm_lims = ax_rm.get_ylim()
+
+        # Plot RM=0 + uncertainty region
+        if rmsf_fwhm is not None:
+            y1 = [0 - rmsf_fwhm / 2.0] * 2
+            y2 = [0 + rmsf_fwhm / 2.0] * 2
+            ax_rm.fill_between(phase_range, y1, y2, color=line_col, alpha=0.2, zorder=0)
+            ax_rm.axhline(y=0, linestyle="--", color=line_col, linewidth=lw, zorder=1)
+
+        ax_rm.set_ylim(rm_lims)
 
     # Add text to profile to axis
+    if plot_rm:
+        text_shift = 0.01
+    else:
+        text_shift = 0.0
     ax_prof.text(
-        0.025,
+        0.025 + text_shift,
         0.95,
         f"{cube.source}",
         horizontalalignment="left",
@@ -218,7 +319,7 @@ def plot_pol_profile(
         transform=ax_prof.transAxes,
     )
     ax_prof.text(
-        0.975,
+        0.975 - text_shift,
         0.95,
         f"{cube.ctr_freq:.0f} MHz",
         horizontalalignment="right",
@@ -227,30 +328,35 @@ def plot_pol_profile(
     )
 
     # X limits
-    if phase_range is None:
-        phase_range = [0, 1]
-    for iax in [ax_pa, ax_prof]:
-        iax.set_xlim(phase_range)
+    for iax in [ax_rm, ax_pa, ax_prof]:
+        if iax is not None:
+            iax.set_xlim(phase_range)
 
     # Y limits
     ax_pa.set_ylim([-120, 120])
 
     # Ticks
+    if plot_rm:
+        ax_rm.set_xticklabels([])
     ax_pa.set_xticklabels([])
     ax_pa.set_yticks([-90, 0, 90])
     ax_pa.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
-    ax_pa.tick_params(which="both", right=True, top=True)
-    ax_prof.tick_params(which="both", right=True, top=True)
-    for iax in [ax_pa, ax_prof]:
-        iax.minorticks_on()
-        iax.tick_params(axis="both", which="both", direction="in")
-        iax.tick_params(axis="both", which="major", length=4)
-        iax.tick_params(axis="both", which="minor", length=2)
+    for iax in [ax_rm, ax_pa, ax_prof]:
+        if iax is not None:
+            iax.tick_params(which="both", right=True, top=True)
+            iax.minorticks_on()
+            iax.tick_params(axis="both", which="both", direction="in")
+            iax.tick_params(axis="both", which="major", length=4)
+            iax.tick_params(axis="both", which="minor", length=2)
 
     # Labels
+    if plot_rm:
+        ax_rm.set_ylabel("RM [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
     ax_prof.set_xlabel("Pulse Phase")
     ax_prof.set_ylabel("Normalised Flux Density")
     ax_pa.set_ylabel("P.A. [deg]")
+
+    fig.align_ylabels()
 
     logger.info(f"Saving plot file: {savename}.png")
     fig.savefig(savename + ".png")
@@ -260,6 +366,22 @@ def plot_pol_profile(
         fig.savefig(savename + ".pdf")
 
     plt.close()
+
+    if save_data:
+        header = "bin_idx,I,Q,U,V,L,P0,PA,PA_err,RM,RM_err"
+        prof_array = np.empty(shape=(11, cube.num_bin), dtype=np.float64)
+        prof_array[0, :] = bins
+        prof_array[1:5, :] = iquv_prof
+        prof_array[5, :] = l_prof
+        prof_array[6, :] = p0
+        prof_array[7, :] = pa_prof[0]
+        prof_array[8, :] = pa_prof[1]
+        if plot_rm:
+            prof_array[9, :] = np.where(rm_mask, rm_phi_qty[0], None)
+            if rm_phi_qty[1] is not None:
+                prof_array[10, :] = np.where(rm_mask, rm_phi_qty[1], None)
+        logger.info(f"Saving data file: {savename}_data.csv")
+        np.savetxt(f"{savename}_data.csv", prof_array.T, delimiter=",", header=header)
 
 
 def plot_freq_phase(
@@ -370,7 +492,7 @@ def plot_2d_fdf(
     rm_phi_qty: tuple | None = None,
     rm_prof_qty: tuple | None = None,
     onpulse_win: np.ndarray | None = None,
-    mask: np.ndarray | None = None,
+    rm_mask: np.ndarray | None = None,
     plot_peaks: bool = False,
     plot_onpulse: bool = False,
     plot_pa: bool = False,
@@ -401,7 +523,7 @@ def plot_2d_fdf(
     onpulse_win : `np.ndarray`, optional
         An array of bin indices defining the onpulse window. If `None`, will use the
         full phase range. Default: `None`.
-    mask : `np.ndarray`, optional
+    rm_mask : `np.ndarray`, optional
         An array of booleans to act as a mask for the measured RM values.
         Default: `None`.
     plot_peaks : `bool`, optional
@@ -433,9 +555,8 @@ def plot_2d_fdf(
         cube.defaraday(rm_prof_qty[0])
 
     # Will by default use 1/8 of the profile to find offpulse noise
-    bins, iquv_prof, l_prof, pa_bins, pa_prof, sigma_i, p0 = (
-        psrutils.get_bias_corrected_pol_profile(cube, p0_cutoff=p0_cutoff, logger=logger)
-    )
+    bins = np.arange(cube.num_bin) / (cube.num_bin - 1)
+    iquv_prof, l_prof, pa_prof, p0, _ = psrutils.get_bias_corrected_pol_profile(cube, logger=logger)
 
     if onpulse_win is None:
         fdf_amp_1Dy = fdf_amp_2D.mean(0)
@@ -548,27 +669,22 @@ def plot_2d_fdf(
     )
     if plot_peaks and rm_phi_qty is not None:
         # Plot RM measurements
-        rm_bin = rm_phi_qty[0]
+        if rm_mask is None:
+            rm_mask = np.full(rm_phi_qty[0].shape[0], True)
 
-        if mask is None:
-            mask = np.full(rm_bin.shape[0], True)
-
-        l_mask = p0 > p0_cutoff
-        mask = mask & l_mask
+        full_rm_mask = rm_mask & (p0 > p0_cutoff)
 
         if rm_phi_qty[1] is not None:
-            rm_bin_unc = np.abs(rm_phi_qty[1])[mask]
+            rm_phi_unc = np.abs(rm_phi_qty[1])[full_rm_mask]
             marker = "none"
         else:
-            rm_bin_unc = None
+            rm_phi_unc = None
             marker = "o"
 
-        bin_centres = np.arange(rm_bin.shape[0]) / (rm_bin.shape[0] - 1)
-
         ax_fdf_2d.errorbar(
-            x=bin_centres[mask],
-            y=rm_bin[mask],
-            yerr=rm_bin_unc,
+            x=bins[full_rm_mask],
+            y=rm_phi_qty[0][full_rm_mask],
+            yerr=rm_phi_unc,
             color="tab:red",
             marker=marker,
             ms=1,
@@ -580,11 +696,12 @@ def plot_2d_fdf(
 
     # Position angle vs phase
     if plot_pa:
+        pa_mask = p0 > p0_cutoff
         for offset in [0, -180, 180]:
             ax_pa.errorbar(
-                x=pa_bins,
-                y=pa_prof[0] + offset,
-                yerr=pa_prof[1],
+                x=bins[pa_mask],
+                y=pa_prof[0, pa_mask] + offset,
+                yerr=pa_prof[1, pa_mask],
                 color="k",
                 marker="none",
                 ms=1,
