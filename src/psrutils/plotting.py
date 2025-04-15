@@ -373,8 +373,10 @@ def plot_2d_fdf(
     mask: np.ndarray | None = None,
     plot_peaks: bool = False,
     plot_onpulse: bool = False,
+    plot_pa: bool = False,
     phase_range: Tuple[float, float] | None = None,
     phi_range: Tuple[float, float] | None = None,
+    p0_cutoff: float | None = 3.0,
     savename: str = "fdf",
     save_pdf: bool = False,
     dark_mode: bool = False,
@@ -396,6 +398,9 @@ def plot_2d_fdf(
         The RM measurements and uncertainties for each phase bin. Default: `None`.
     rm_prof_qty : `Tuple[float, float]`, optional
         The RM measurement and uncertainty for the profile. Default: `None`.
+    onpulse_win : `np.ndarray`, optional
+        An array of bin indices defining the onpulse window. If `None`, will use the
+        full phase range. Default: `None`.
     mask : `np.ndarray`, optional
         An array of booleans to act as a mask for the measured RM values.
         Default: `None`.
@@ -403,10 +408,15 @@ def plot_2d_fdf(
         Plot the measure RM and error bars. Default: `False`.
     plot_onpulse : `bool`, optional
         Shade the on-pulse region.
+    plot_pa : `bool`, optional
+        Plot the position angle as a function of phase. Default: `False`.
     phase_range : `Tuple[float, float]`, optional
         The phase range in rotations. Default: [0, 1].
     phi_range : `Tuple[float, float]`, optional
         The Faraday depth range in rad/m^2. Default: full range.
+    p0_cutoff : `float`, optional
+        Mask all RM and PA measurements below this polarisation measure. If `None` is
+        specified then no mask will be applied. Default: 3.0.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'fdf'.
     save_pdf : `bool`, optional
@@ -422,14 +432,10 @@ def plot_2d_fdf(
     if rm_prof_qty is not None:
         cube.defaraday(rm_prof_qty[0])
 
-    iquv_prof, l_prof, pa_prof, sigma_i = psrutils.get_bias_corrected_pol_profile(
-        cube, logger=logger
+    # Will by default use 1/8 of the profile to find offpulse noise
+    bins, iquv_prof, l_prof, pa_bins, pa_prof, sigma_i, p0 = (
+        psrutils.get_bias_corrected_pol_profile(cube, p0_cutoff=p0_cutoff, logger=logger)
     )
-    p0 = l_prof / sigma_i
-    pa_prof = np.rad2deg(pa_prof)
-    p0_pa_cutoff = 3
-
-    bin_centres = np.arange(cube.num_bin) / (cube.num_bin - 1)
 
     if onpulse_win is None:
         fdf_amp_1Dy = fdf_amp_2D.mean(0)
@@ -447,27 +453,38 @@ def plot_2d_fdf(
         cmap_name = "arctic_r"
 
     # Define Figure and Axes
-    fig = plt.figure(figsize=(6, 6.5), layout="tight", dpi=300)
-
-    gs = gridspec.GridSpec(
-        ncols=2,
-        nrows=3,
-        figure=fig,
-        height_ratios=(1, 2.5, 1),
-        width_ratios=(3, 1),
-        hspace=0,
-        wspace=0,
-    )
-
+    if plot_pa:
+        fig = plt.figure(figsize=(6, 6.5), layout="tight", dpi=300)
+        gs = gridspec.GridSpec(
+            ncols=2,
+            nrows=3,
+            figure=fig,
+            height_ratios=(1, 2.5, 1),
+            width_ratios=(3, 1),
+            hspace=0,
+            wspace=0,
+        )
+        ax_pa = fig.add_subplot(gs[2, 0])
+    else:
+        fig = plt.figure(figsize=(6, 5.5), layout="tight", dpi=300)
+        gs = gridspec.GridSpec(
+            ncols=2,
+            nrows=2,
+            figure=fig,
+            height_ratios=(1.1, 2.5),
+            width_ratios=(2.5, 1),
+            hspace=0,
+            wspace=0,
+        )
+        ax_pa = None
     ax_prof = fig.add_subplot(gs[0, 0])
     ax_fdf_1dy = fig.add_subplot(gs[1, 1])
     ax_fdf_2d = fig.add_subplot(gs[1, 0])
-    ax_pa = fig.add_subplot(gs[2, 0])
 
     # Plot profile
-    ax_prof.plot(bin_centres, iquv_prof[0], linewidth=lw, color=line_col, zorder=10)
-    ax_prof.plot(bin_centres, l_prof, linewidth=lw, color="tab:red", zorder=9)
-    ax_prof.plot(bin_centres, iquv_prof[3], linewidth=lw, color="tab:blue", zorder=8)
+    ax_prof.plot(bins, iquv_prof[0], linewidth=lw, color=line_col, zorder=10)
+    ax_prof.plot(bins, l_prof, linewidth=lw, color="tab:red", zorder=9)
+    ax_prof.plot(bins, iquv_prof[3], linewidth=lw, color="tab:blue", zorder=8)
     ax_prof.text(
         0.025,
         0.91,
@@ -493,10 +510,10 @@ def plot_2d_fdf(
             )
         else:
             ax_prof.fill_betweenx(
-                ylims, onpulse_win[0], bin_centres[-1], color="tab:blue", alpha=0.2, zorder=0
+                ylims, onpulse_win[0], bins[-1], color="tab:blue", alpha=0.2, zorder=0
             )
             ax_prof.fill_betweenx(
-                ylims, bin_centres[0], onpulse_win[-1], color="tab:blue", alpha=0.2, zorder=0
+                ylims, bins[0], onpulse_win[-1], color="tab:blue", alpha=0.2, zorder=0
             )
         ax_prof.set_ylim(ylims)
 
@@ -536,7 +553,7 @@ def plot_2d_fdf(
         if mask is None:
             mask = np.full(rm_bin.shape[0], True)
 
-        l_mask = l_prof / sigma_i > 3
+        l_mask = p0 > p0_cutoff
         mask = mask & l_mask
 
         if rm_phi_qty[1] is not None:
@@ -561,27 +578,28 @@ def plot_2d_fdf(
             capsize=0,
         )
 
-    # Plot PA
-    pa_mask = p0 > p0_pa_cutoff
-    for offset in [0, -180, 180]:
-        ax_pa.errorbar(
-            x=bin_centres[pa_mask],
-            y=pa_prof[0, pa_mask] + offset,
-            yerr=pa_prof[1, pa_mask],
-            color="k",
-            marker="none",
-            ms=1,
-            linestyle="none",
-            elinewidth=lw,
-            capthick=lw,
-            capsize=0,
-        )
+    # Position angle vs phase
+    if plot_pa:
+        for offset in [0, -180, 180]:
+            ax_pa.errorbar(
+                x=pa_bins,
+                y=pa_prof[0] + offset,
+                yerr=pa_prof[1],
+                color="k",
+                marker="none",
+                ms=1,
+                linestyle="none",
+                elinewidth=lw,
+                capthick=lw,
+                capsize=0,
+            )
 
     # Phase limits
     if phase_range is None:
         phase_range = [0, 1]
     for iax in [ax_fdf_2d, ax_pa, ax_prof]:
-        iax.set_xlim(phase_range)
+        if iax is not None:
+            iax.set_xlim(phase_range)
 
     # Faraday depth limits
     if phi_range is None:
@@ -591,31 +609,39 @@ def plot_2d_fdf(
 
     # Other limits
     ax_fdf_1dy.set_xlim(xlims)
-    ax_pa.set_ylim([-120, 120])
+    if plot_pa:
+        ax_pa.set_ylim([-120, 120])
 
-    # Ticks
-    ax_prof.set_yticks([])
+    # Tick locations
     ax_fdf_1dy.set_xticks([])
-    ax_pa.set_yticks([-90, 0, 90])
-    ax_pa.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
+    ax_prof.set_yticks([])
+    if plot_pa:
+        ax_pa.set_yticks([-90, 0, 90])
+        ax_pa.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
 
-    for iax in [ax_prof, ax_fdf_2d]:
-        iax.set_xticklabels([])
-
+    # Tick labels
     ax_fdf_1dy.set_yticklabels([])
+    ax_prof.set_xticklabels([])
+    if plot_pa:
+        ax_fdf_2d.set_xticklabels([])
 
-    ax_pa.tick_params(which="both", right=True, top=True)
+    # Tick configuration
     ax_fdf_2d.tick_params(which="both", right=True, top=True)
-
+    if plot_pa:
+        ax_pa.tick_params(which="both", right=True, top=True)
     for iax in [ax_prof, ax_fdf_1dy, ax_fdf_2d, ax_pa]:
-        iax.minorticks_on()
-        iax.tick_params(axis="both", which="both", direction="in")
-        iax.tick_params(axis="both", which="major", length=3)
-        iax.tick_params(axis="both", which="minor", length=1.5)
+        if iax is not None:
+            iax.minorticks_on()
+            iax.tick_params(axis="both", which="both", direction="in")
+            iax.tick_params(axis="both", which="major", length=3)
+            iax.tick_params(axis="both", which="minor", length=1.5)
 
     # Labels
-    ax_pa.set_xlabel("Pulse Phase")
-    ax_pa.set_ylabel("P.A. [deg]")
+    if plot_pa:
+        ax_pa.set_xlabel("Pulse Phase")
+        ax_pa.set_ylabel("P.A. [deg]")
+    else:
+        ax_fdf_2d.set_xlabel("Pulse Phase")
     ax_fdf_2d.set_ylabel("Faraday Depth, $\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
 
     logger.info(f"Saving plot file: {savename}.png")

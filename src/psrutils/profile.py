@@ -101,7 +101,10 @@ def get_onpulse_region(
 
 
 def get_bias_corrected_pol_profile(
-    cube: psrutils.StokesCube, windowsize: int | None = None, logger: logging.Logger | None = None
+    cube: psrutils.StokesCube,
+    windowsize: int | None = None,
+    p0_cutoff: float | None = 3.0,
+    logger: logging.Logger | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
     """Get the Stokes I/L/V/PA profile and correct for bias in the linear
     polarisation degree and angle.
@@ -112,24 +115,36 @@ def get_bias_corrected_pol_profile(
         A StokesCube object.
     windowsize : `int`, optional
         Window width (in bins) defining the trial regions to integrate. Default: `None`
+    p0_cutoff : `float`, optional
+        Mask all PA measurements below this polarisation measure. If `None` is specified
+        then no mask will be applied. Default: 3.0.
     logger : `logging.Logger`, optional
         A logger to use. Default: `None`.
 
     Returns
     -------
+    bins : `np.ndarray`
+        A 1xN array containing the bin centres normalised between (0,1).
     iquv_profile : `np.ndarray`
         A 4xN array containing Stokes I/Q/U/V for N bins.
     l_true : `np.ndarray`
         A 1xN array containing the debiased Stokes L for N bins.
+    bins : `np.ndarray`
+        A 1xM array containing the bin centres masked by p0 > p0_cutoff.
     pa : `np.ndarray`
-        A 2xN array containing the position angle value and uncertainty for N bins.
+        A 2xM array containing the position angle value and uncertainty masked by p0 > p0_cutoff.
     sigma_i : `float`
         The standard deviation of the offpulse noise in the Stokes I profile.
+    p0 : `np.ndarray`
+        A 1xN array containing the debiased polarisation measure L/sigma_I.
     """
     if logger is None:
         logger = psrutils.get_logger()
 
     iquv_profile = cube.pol_profile
+
+    # Define the bin centres
+    bins = np.arange(cube.num_bin) / (cube.num_bin - 1)
 
     # Get the indices of the offpulse bins
     offpulse_win = psrutils.get_offpulse_region(
@@ -154,7 +169,7 @@ def get_bias_corrected_pol_profile(
         -np.sqrt(np.abs(l_meas**2 - sigma_i**2)),
     )
 
-    # Bias-corrected fractional degree of linear polarisation
+    # Bias-corrected polarisation measure
     p0 = l_true / sigma_i
 
     # Position angle of linear polarisation
@@ -167,8 +182,14 @@ def get_bias_corrected_pol_profile(
         0.5 / p0,
         pa_unc_dist,
     )
+    pa = np.rad2deg(pa)
+    pa_bins = bins.copy()
+    if p0_cutoff is not None:
+        pa_mask = p0 > p0_cutoff
+        pa = pa[:, pa_mask]
+        pa_bins = pa_bins[pa_mask]
 
-    return iquv_profile, l_true, pa, sigma_i
+    return bins, iquv_profile, l_true, pa_bins, pa, sigma_i, p0
 
 
 def lookup_sigma_pa(p0_meas: np.ndarray) -> np.ndarray:

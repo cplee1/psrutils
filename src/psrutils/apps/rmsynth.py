@@ -23,6 +23,7 @@ import psrutils
 @click.option("--rmlim", type=float, default=100.0, help="RM limit.")
 @click.option("--rmres", type=float, default=0.01, help="RM resolution.")
 @click.option("-n", "nsamp", type=int, help="The number of bootstrap samples.")
+@click.option("--p0_cutoff", type=float, default=3.0, help="Mask below this L/sigma_I value.")
 @click.option("--phi_plotlim", type=float, nargs=2, help="Plot limits in rad/m^2.")
 @click.option("--phase_plotlim", type=float, nargs=2, help="Plot limits in rotations.")
 @click.option(
@@ -33,6 +34,7 @@ import psrutils
 @click.option("--boxplot", is_flag=True, help="Plot RM_phi as boxplots.")
 @click.option("--peaks", is_flag=True, help="Plot RM measurements.")
 @click.option("--plot_onpulse", is_flag=True, help="Shade the on-pulse region.")
+@click.option("--plot_pa", is_flag=True, help="Plot the position angle.")
 @click.option("--save_pdf", is_flag=True, help="Save as a PDF.")
 @click.option("-d", "dark_mode", is_flag=True, help="Use a dark background.")
 def main(
@@ -46,6 +48,7 @@ def main(
     rmlim: float,
     rmres: float,
     nsamp: int,
+    p0_cutoff: float,
     phi_plotlim: Tuple[float, float],
     phase_plotlim: Tuple[float, float],
     discard: Tuple[float, float],
@@ -54,6 +57,7 @@ def main(
     boxplot: bool,
     peaks: bool,
     plot_onpulse: bool,
+    plot_pa: bool,
     save_pdf: bool,
     dark_mode: bool,
 ) -> None:
@@ -98,7 +102,7 @@ def main(
         rm_phi_meas = np.mean(rm_phi_samples, axis=1)
         rm_phi_unc = np.std(rm_phi_samples, axis=1)
         rm_phi_qty = (rm_phi_meas, rm_phi_unc)
-        peak_mask = np.where(rm_phi_unc < 1.25, True, False)
+        peak_mask = np.where(rm_phi_unc < rm_stats["rmsf_fwhm"] / 2, True, False)
 
         with open(f"{cube.source}_rm_phi.csv", "w") as f:
             for meas, unc in zip(rm_phi_meas, rm_phi_unc):
@@ -178,8 +182,10 @@ def main(
         mask=peak_mask,
         plot_peaks=peaks,
         plot_onpulse=plot_onpulse,
+        plot_pa=plot_pa,
         phase_range=phase_plotlim,
         phi_range=phi_plotlim,
+        p0_cutoff=p0_cutoff,
         savename=f"{cube.source}_fdf",
         save_pdf=save_pdf,
         dark_mode=dark_mode,
