@@ -16,6 +16,8 @@ def main(spec_files: tuple, ncols: int, nrows: int, spacing: float, plot_ctrline
     if ncols * nrows < len(spec_files):
         raise ValueError("To few subplots for the provided archives.")
 
+    logger = psrutils.get_logger()
+
     plt.rcParams["mathtext.fontset"] = "dejavuserif"
     plt.rcParams["text.usetex"] = True
     plt.rcParams["font.family"] = "serif"
@@ -72,11 +74,11 @@ def main(spec_files: tuple, ncols: int, nrows: int, spacing: float, plot_ctrline
         for jj, (cube, tele) in enumerate(zip(cube_list, telescope_list)):
             if cube.num_pol == 4:
                 psrutils.add_profile_to_axes(
-                    cube, ax_prof=ax, voffset=jj * spacing, plot_pol=True, lw=lw
+                    cube, ax_prof=ax, voffset=jj * spacing, plot_pol=True, lw=lw, logger=logger
                 )
             else:
                 psrutils.add_profile_to_axes(
-                    cube, ax_prof=ax, voffset=jj * spacing, plot_pol=False, lw=lw
+                    cube, ax_prof=ax, voffset=jj * spacing, plot_pol=False, lw=lw, logger=logger
                 )
             minfreq = f"{cube.min_freq:.0f}"
             maxfreq = f"{cube.max_freq:.0f}"
