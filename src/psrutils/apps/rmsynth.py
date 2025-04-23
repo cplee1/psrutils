@@ -1,7 +1,6 @@
-from typing import Tuple
-
 import click
 import numpy as np
+import warnings
 
 import psrutils
 
@@ -50,9 +49,9 @@ def main(
     rmres: float,
     nsamp: int,
     p0_cutoff: float,
-    phi_plotlim: Tuple[float, float],
-    phase_plotlim: Tuple[float, float],
-    discard: Tuple[float, float],
+    phi_plotlim: tuple[float, float],
+    phase_plotlim: tuple[float, float],
+    discard: tuple[float, float],
     meas_rm_prof: bool,
     meas_rm_scat: bool,
     boxplot: bool,
@@ -101,8 +100,20 @@ def main(
     logger.info(rm_stats)
 
     if type(nsamp) is int:
-        rm_phi_meas = np.mean(rm_phi_samples, axis=1)
-        rm_phi_unc = np.std(rm_phi_samples, axis=1)
+        if discard is not None:
+            rm_phi_samples_valid = np.where(
+                (rm_phi_samples > discard[0]) & (rm_phi_samples < discard[1]),
+                rm_phi_samples,
+                np.nan,
+            )
+        else:
+            rm_phi_samples_valid = rm_phi_samples
+        with warnings.catch_warnings():
+            # For bins with no valid samples (when using --discard), suppress
+            # the "Mean of empty slice" warning
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            rm_phi_meas = np.nanmean(rm_phi_samples_valid, axis=1)
+            rm_phi_unc = np.nanstd(rm_phi_samples_valid, axis=1)
         rm_phi_qty = (rm_phi_meas, rm_phi_unc)
         peak_mask = np.where(rm_phi_unc < rm_stats["rmsf_fwhm"] / 2, True, False)
 
