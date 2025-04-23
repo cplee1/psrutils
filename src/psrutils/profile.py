@@ -105,8 +105,10 @@ def get_bias_corrected_pol_profile(
     windowsize: int | None = None,
     logger: logging.Logger | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
-    """Get the Stokes I/L/V/PA profile and correct for bias in the linear
-    polarisation degree and angle.
+    """Get the full polarisation profile and correct for bias in the linear
+    polarisation degree and angle. If no polarisation information is found in
+    the archive, then `None` will be returned for all outputs except for the
+    Stokes I profile.
 
     Parameters
     ----------
@@ -121,19 +123,23 @@ def get_bias_corrected_pol_profile(
     -------
     iquv_profile : `np.ndarray`
         A 4xN array containing Stokes I/Q/U/V for N bins.
-    l_true : `np.ndarray`
+    l_true : `np.ndarray | None`
         A 1xN array containing the debiased Stokes L for N bins.
-    pa : `np.ndarray`
+    pa : `np.ndarray | None`
         A 2xN array containing the position angle value and uncertainty.
-    p0 : `np.ndarray`
+    p0 : `np.ndarray | None`
         A 1xN array containing the debiased polarisation measure L/sigma_I.
-    sigma_i : `float`
+    sigma_i : `float | None`
         The standard deviation of the offpulse noise in the Stokes I profile.
     """
     if logger is None:
         logger = psrutils.get_logger()
 
     iquv_profile = cube.pol_profile
+
+    # Default if the archive does not contain polarisation information
+    if iquv_profile.shape[0] == 1:
+        return iquv_profile, None, None, None, None
 
     # Get the indices of the offpulse bins
     offpulse_win = psrutils.get_offpulse_region(
