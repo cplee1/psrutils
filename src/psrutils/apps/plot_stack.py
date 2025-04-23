@@ -6,10 +6,6 @@ import psrqpy
 import psrutils
 
 
-def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
-    return phase_bins * 360 - 180
-
-
 @click.command()
 @click.argument("spec_files", nargs=-1, type=click.Path(exists=True))
 @click.option("-c", "ncols", type=int, help="Number of columns.")
@@ -123,7 +119,7 @@ def main(
                     cube,
                     ax_prof=ax,
                     voffset=jj * spacing,
-                    bin_func=centre_offset_degrees,
+                    bin_func=psrutils.centre_offset_degrees,
                     plot_pol=plot_pol,
                     lw=lw,
                     I_colour=I_colour,
@@ -134,7 +130,7 @@ def main(
                     cube,
                     ax_prof=ax,
                     voffset=jj * spacing,
-                    bin_func=centre_offset_degrees,
+                    bin_func=psrutils.centre_offset_degrees,
                     plot_pol=plot_pol,
                     lw=lw,
                     I_colour=I_colour,

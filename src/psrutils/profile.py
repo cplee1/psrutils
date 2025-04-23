@@ -9,6 +9,7 @@ from scipy.special import erf
 import psrutils
 
 __all__ = [
+    "centre_offset_degrees",
     "get_offpulse_region",
     "get_onpulse_region",
     "get_bias_corrected_pol_profile",
@@ -16,6 +17,10 @@ __all__ = [
     "compute_sigma_pa_table",
     "pa_dist",
 ]
+
+
+def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
+    return phase_bins * 360 - 180
 
 
 def get_offpulse_region(
