@@ -536,12 +536,14 @@ def plot_2d_fdf(
     rm_prof_qty: tuple | None = None,
     onpulse_win: np.ndarray | None = None,
     rm_mask: np.ndarray | None = None,
+    cln_comps: np.ndarray | None = None,
     plot_peaks: bool = False,
     plot_onpulse: bool = False,
     plot_pa: bool = False,
     phase_range: tuple[float, float] | None = None,
     phi_range: tuple[float, float] | None = None,
     p0_cutoff: float | None = 3.0,
+    bin_func: Callable[[np.ndarray], np.ndarray] | None = None,
     savename: str = "fdf",
     save_pdf: bool = False,
     dark_mode: bool = False,
@@ -569,6 +571,8 @@ def plot_2d_fdf(
     rm_mask : `np.ndarray`, optional
         An array of booleans to act as a mask for the measured RM values.
         Default: `None`.
+    cln_comps : `np.ndarray`, optional
+        RM-CLEAN components to plot. Default: `None`.
     plot_peaks : `bool`, optional
         Plot the measure RM and error bars. Default: `False`.
     plot_onpulse : `bool`, optional
@@ -582,6 +586,8 @@ def plot_2d_fdf(
     p0_cutoff : `float`, optional
         Mask all RM and PA measurements below this polarisation measure. If `None` is
         specified then no mask will be applied. Default: 3.0.
+    bin_func : `Callable`, optional
+        A function that maps the phase bins from [0,1] to anything. Default: `None`.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'fdf'.
     save_pdf : `bool`, optional
@@ -598,8 +604,13 @@ def plot_2d_fdf(
         cube.defaraday(rm_prof_qty[0])
 
     # Will by default use 1/8 of the profile to find offpulse noise
-    bins = np.arange(cube.num_bin) / (cube.num_bin - 1)
     iquv_prof, l_prof, pa_prof, p0, _ = psrutils.get_bias_corrected_pol_profile(cube, logger=logger)
+
+    bins = np.linspace(0, 1, cube.num_bin)
+
+    # Transforms the bin coordinates from [0,1] -> anything
+    if bin_func is not None:
+        bins = bin_func(bins)
 
     if onpulse_win is None:
         fdf_amp_1Dy = fdf_amp_2D.mean(0)
@@ -607,7 +618,7 @@ def plot_2d_fdf(
         fdf_amp_1Dy = fdf_amp_2D[onpulse_win].mean(0)
 
     # Styles
-    lw = 0.5
+    lw = 0.6
     if dark_mode:
         plt.style.use("dark_background")
         line_col = "w"
@@ -657,14 +668,14 @@ def plot_2d_fdf(
         verticalalignment="top",
         transform=ax_prof.transAxes,
     )
-    ax_prof.text(
-        0.97,
-        0.91,
-        f"{cube.ctr_freq:.0f} MHz",
-        horizontalalignment="right",
-        verticalalignment="top",
-        transform=ax_prof.transAxes,
-    )
+    # ax_prof.text(
+    #     0.97,
+    #     0.91,
+    #     f"{cube.ctr_freq:.0f} MHz",
+    #     horizontalalignment="right",
+    #     verticalalignment="top",
+    #     transform=ax_prof.transAxes,
+    # )
     if onpulse_win is not None and plot_onpulse:
         ylims = ax_prof.get_ylim()
         onpulse_win = onpulse_win.astype(float) / (cube.num_bin - 1)
@@ -708,7 +719,7 @@ def plot_2d_fdf(
     ax_fdf_2d.imshow(
         np.transpose(fdf_amp_2D).astype(float),
         origin="lower",
-        extent=(0, 1, phi[0], phi[-1]),
+        extent=(bins[0], bins[-1], phi[0], phi[-1]),
         aspect="auto",
         cmap=cmap,
         interpolation="none",
@@ -739,6 +750,19 @@ def plot_2d_fdf(
             capthick=lw,
             capsize=0,
         )
+    if cln_comps is not None:
+        for bin_idx in range(bins.size):
+            cln_comps_bin = np.abs(cln_comps[bin_idx])
+            fd_bin_idx = np.arange(cln_comps_bin.size, dtype=int)
+            fd_bin_idx_nonzero = fd_bin_idx[cln_comps_bin > 0.0]
+            ax_fdf_2d.errorbar(
+                x=[bins[bin_idx]] * len(fd_bin_idx_nonzero),
+                y=phi[fd_bin_idx_nonzero],
+                color="tab:orange",
+                marker="o",
+                ms=0.6,
+                linestyle="none",
+            )
 
     # Position angle vs phase
     if plot_pa:
@@ -759,7 +783,12 @@ def plot_2d_fdf(
 
     # Phase limits
     if phase_range is None:
-        phase_range = [0, 1]
+        phase_range = (0, 1)
+
+    # Convert phase units
+    if bin_func is not None:
+        phase_range = (bin_func(phase_range[0]), bin_func(phase_range[1]))
+
     for iax in [ax_fdf_2d, ax_pa, ax_prof]:
         if iax is not None:
             iax.set_xlim(phase_range)
@@ -800,11 +829,16 @@ def plot_2d_fdf(
             iax.tick_params(axis="both", which="minor", length=2)
 
     # Labels
+    if bin_func is not None:
+        # Assume degrees
+        xlab = "Pulse Longitude [deg]"
+    else:
+        xlab = "Pulse Phase"
     if plot_pa:
-        ax_pa.set_xlabel("Pulse Phase")
+        ax_pa.set_xlabel(xlab)
         ax_pa.set_ylabel("P.A. [deg]")
     else:
-        ax_fdf_2d.set_xlabel("Pulse Phase")
+        ax_fdf_2d.set_xlabel(xlab)
     ax_fdf_2d.set_ylabel("Faraday Depth, $\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
 
     logger.info(f"Saving plot file: {savename}.png")

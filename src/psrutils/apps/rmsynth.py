@@ -31,8 +31,10 @@ import psrutils
 )
 @click.option("--meas_rm_prof", is_flag=True, help="Measure RM_prof.")
 @click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
+@click.option("--no_clean", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
 @click.option("--boxplot", is_flag=True, help="Plot RM_phi as boxplots.")
 @click.option("--peaks", is_flag=True, help="Plot RM measurements.")
+@click.option("--plot_clean_comps", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
 @click.option("--plot_onpulse", is_flag=True, help="Shade the on-pulse region.")
 @click.option("--plot_pa", is_flag=True, help="Plot the position angle.")
 @click.option("--plot_pol_prof", is_flag=True, help="Plot the full polarisation profile.")
@@ -55,8 +57,10 @@ def main(
     discard: tuple[float, float],
     meas_rm_prof: bool,
     meas_rm_scat: bool,
+    no_clean: bool,
     boxplot: bool,
     peaks: bool,
+    plot_clean_comps: bool,
     plot_onpulse: bool,
     plot_pa: bool,
     plot_pol_prof: bool,
@@ -180,9 +184,17 @@ def main(
             rm_prof_qty = None
         peak_mask = None
 
-    logger.info("Running RM-CLEAN")
-    rmcln_result = psrutils.rm_clean(phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, logger=logger)
-    cln_fdf = rmcln_result[0]
+    cln_comps = None
+    if no_clean:
+        cln_fdf = fdf
+    else:
+        logger.info("Running RM-CLEAN")
+        rmcln_result = psrutils.rm_clean(
+            phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, logger=logger
+        )
+        cln_fdf = rmcln_result[0]
+        if plot_clean_comps:
+            cln_comps = rmcln_result[2]
 
     logger.info("Plotting")
     psrutils.plotting.plot_2d_fdf(
@@ -194,12 +206,14 @@ def main(
         rm_prof_qty=rm_prof_qty,
         onpulse_win=onpulse_win,
         rm_mask=peak_mask,
+        cln_comps=cln_comps,
         plot_peaks=peaks,
         plot_onpulse=plot_onpulse,
         plot_pa=plot_pa,
         phase_range=phase_plotlim,
         phi_range=phi_plotlim,
         p0_cutoff=p0_cutoff,
+        bin_func=psrutils.centre_offset_degrees,
         savename=f"{cube.source}_fdf",
         save_pdf=save_pdf,
         dark_mode=dark_mode,
