@@ -37,12 +37,6 @@ def main(
 
     logger = psrutils.get_logger()
 
-    plt.rcParams["mathtext.fontset"] = "dejavuserif"
-    plt.rcParams["text.usetex"] = True
-    plt.rcParams["font.family"] = "serif"
-    plt.rcParams["font.serif"] = "cm"
-    plt.rcParams["font.size"] = 12
-
     fig = plt.figure(figsize=(ncols * colsize, nrows * rowsize), dpi=300, tight_layout=True)
 
     gs0 = fig.add_gridspec(nrows, ncols)
@@ -108,7 +102,7 @@ def main(
 
         ax = fig.add_subplot(gs0[row, col])
 
-        for jj, (cube, tele) in enumerate(zip(cube_list, telescope_list)):
+        for jj, (cube, tele) in enumerate(zip(cube_list, telescope_list, strict=False)):
             if not plot_pol and tele == "MWA":
                 I_colour = "tab:red"
             else:

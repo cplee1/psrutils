@@ -10,6 +10,18 @@ from uncertainties import ufloat
 import psrutils
 
 
+def max_peak_to_peak(data, unc):
+    max_p2p = 0
+    for ii in range(data.size):
+        for jj in range(data.size):
+            if ii == jj:
+                continue
+            res = abs(data[ii] - data[jj]) / np.sqrt(unc[ii] ** 2 + unc[jj] ** 2)
+            if res > max_p2p:
+                max_p2p = res
+    return max_p2p
+
+
 def make_figure(
     csvfiles: tuple,
     ncols: int,
@@ -34,7 +46,7 @@ def make_figure(
     lw = 0.7
     caplw = 0.7
     scatter_params = dict(
-        color="k", marker="none", linestyle="none", elinewidth=caplw, capthick=caplw, capsize=0.6
+        color="k", marker="none", linestyle="none", elinewidth=caplw, capthick=caplw, capsize=0
     )
     line_params = dict(linewidth=lw)
 
@@ -51,17 +63,44 @@ def make_figure(
                 header1 = f.readline().rstrip()
                 header2 = f.readline().rstrip()
                 header3 = f.readline().rstrip()
+                header4 = f.readline().rstrip()
                 source_name = header1.split(" ")[2]
                 rmsf_fwhm = float(header2.split(" ")[2])
                 rm_prof_val = float(header3.split(" ")[2])
                 rm_prof_unc = float(header3.split(" ")[4])
+                sigma_i = float(header4.split(" ")[2])
                 if not np.isnan(rm_prof_val) and not np.isnan(rm_prof_unc):
                     rm_prof = ufloat(rm_prof_val, rm_prof_unc)
                 else:
                     rm_prof = None
 
             # Phase to degrees
-            data[0, :] = data[0] * 360 - 180
+            data[0, :] = psrutils.centre_offset_degrees(data[0])
+
+            if data.shape[0] == 11:
+                bins = data[0]
+                i_prof = data[1]
+                v_prof = data[4]
+                l_prof = data[5]
+                p0_l = data[6]
+                pa = data[7]
+                pa_unc = data[8]
+                rm = data[9]
+                rm_unc = data[10]
+                dv = None
+                dv_unc = None
+            elif data.shape[0] == 14:
+                bins = data[0]
+                i_prof = data[1]
+                v_prof = data[4]
+                l_prof = data[5]
+                p0_l = data[6]
+                pa = data[8]
+                pa_unc = data[9]
+                rm = data[10]
+                rm_unc = data[11]
+                dv = data[12]
+                dv_unc = data[13]
 
             phase_range = (0, 1)
             match source_name:
@@ -71,8 +110,9 @@ def make_figure(
                 case "J0437-4715":
                     phase_range = (0.18, 0.82)
                 case "J0737-3039A":
-                    data[1:] = np.roll(data, 32, axis=1)[1:]
-                    phase_range = (0.1, 0.9)
+                    pass
+                    # data[1:] = np.roll(data, 32, axis=1)[1:]
+                    # phase_range = (0.1, 0.9)
                 case "J1022+1001":
                     phase_range = (0.3, 0.7)
                 case "J1300+1240":
@@ -93,23 +133,35 @@ def make_figure(
                     phase_range = (0.3, 0.7)
                 case _:
                     pass
-            phase_range = (phase_range[0] * 360 - 180, phase_range[1] * 360 - 180)
+            phase_range = (
+                psrutils.centre_offset_degrees(phase_range[0]),
+                psrutils.centre_offset_degrees(phase_range[1]),
+            )
 
-            gs_tmp = gs0[row, col].subgridspec(3, 1, hspace=0, height_ratios=(1, 1, 3))
-            ax_rm = fig.add_subplot(gs_tmp[0])
-            ax_pa = fig.add_subplot(gs_tmp[1])
-            ax_pr = fig.add_subplot(gs_tmp[2])
+            if data.shape[0] == 14 and False:
+                gs_tmp = gs0[row, col].subgridspec(4, 1, hspace=0, height_ratios=(1, 1, 1, 2))
+                ax_dv = fig.add_subplot(gs_tmp[0])
+                ax_rm = fig.add_subplot(gs_tmp[1])
+                ax_pa = fig.add_subplot(gs_tmp[2])
+                ax_pr = fig.add_subplot(gs_tmp[3])
+            else:
+                gs_tmp = gs0[row, col].subgridspec(3, 1, hspace=0, height_ratios=(1, 1, 3))
+                ax_dv = None
+                ax_rm = fig.add_subplot(gs_tmp[0])
+                ax_pa = fig.add_subplot(gs_tmp[1])
+                ax_pr = fig.add_subplot(gs_tmp[2])
 
-            mask = data[6] > p0_cutoff
+            i_mask = i_prof / sigma_i > 10
+            l_mask = p0_l > p0_cutoff
 
-            ax_rm.errorbar(data[0][mask], data[9][mask], yerr=data[10][mask], **scatter_params)
+            ax_rm.errorbar(bins[l_mask], rm[l_mask], yerr=rm_unc[l_mask], **scatter_params)
             for offset in [0, -180, 180, -360, 360]:
                 ax_pa.errorbar(
-                    data[0][mask], data[7][mask] + offset, yerr=data[8][mask], **scatter_params
+                    bins[l_mask], pa[l_mask] + offset, yerr=pa_unc[l_mask], **scatter_params
                 )
-            ax_pr.plot(data[0], data[1], color="k", linestyle="-", zorder=1, **line_params)
-            ax_pr.plot(data[0], data[4], color="tab:blue", linestyle=":", zorder=2, **line_params)
-            ax_pr.plot(data[0], data[5], color="tab:red", linestyle="--", zorder=3, **line_params)
+            ax_pr.plot(bins, i_prof, color="k", linestyle="-", zorder=1, **line_params)
+            ax_pr.plot(bins, v_prof, color="tab:blue", linestyle=":", zorder=2, **line_params)
+            ax_pr.plot(bins, l_prof, color="tab:red", linestyle="--", zorder=3, **line_params)
 
             if rm_prof is not None:
                 # Plot profile-averaged RM with uncertainty band
@@ -133,43 +185,65 @@ def make_figure(
             else:
                 ax_rm.set_yticks([])
 
-            ax_pr.text(
-                0.04,
-                0.91,
-                f"{psrs[source_name]['Name'].replace('-', '$-$')}",
-                horizontalalignment="left",
-                verticalalignment="top",
-                transform=ax_pr.transAxes,
-            )
-            # ax_pr.text(
-            #     0.96,
-            #     0.91,
-            #     "$N_\mathrm{{b}}={:.0f}$".format(data.shape[1]),
-            #     horizontalalignment="right",
-            #     verticalalignment="top",
-            #     transform=ax_pr.transAxes,
-            # )
+            # if source_name == "J0737-3039A":
+            #     ax_pr.text(
+            #         0.95,
+            #         0.93,
+            #         f"{psrs[source_name]['Name'].replace('-', '$-$')}",
+            #         horizontalalignment="right",
+            #         verticalalignment="top",
+            #         transform=ax_pr.transAxes,
+            #     )
+            # else:
+            #     ax_pr.text(
+            #         0.05,
+            #         0.93,
+            #         f"{psrs[source_name]['Name'].replace('-', '$-$')}",
+            #         horizontalalignment="left",
+            #         verticalalignment="top",
+            #         transform=ax_pr.transAxes,
+            #     )
 
-            for ax in [ax_rm, ax_pa, ax_pr]:
-                ax.set_xlim(phase_range)
-                ax.tick_params(which="both", right=True, top=True)
-                ax.minorticks_on()
-                ax.tick_params(axis="both", which="both", direction="in")
-                ax.tick_params(axis="both", which="major", length=4)
-                ax.tick_params(axis="both", which="minor", length=2)
+            if ax_dv is not None:
+                ax_dv.errorbar(
+                    x=bins[i_mask],
+                    y=dv[i_mask],
+                    yerr=dv_unc[i_mask],
+                    **scatter_params,
+                )
+                ax_dv.axhline(y=0, linestyle=":", color="k", linewidth=lw, zorder=1)
+                ax_dv.set_title(f"{psrs[source_name]['Name'].replace('-', '$-$')}")
+            else:
+                ax_rm.set_title(f"{psrs[source_name]['Name'].replace('-', '$-$')}")
 
+            for ax in [ax_dv, ax_rm, ax_pa, ax_pr]:
+                if ax is not None:
+                    ax.set_xlim(phase_range)
+                    ax.tick_params(which="both", right=True, top=True)
+                    ax.minorticks_on()
+                    ax.tick_params(axis="both", which="both", direction="in")
+                    ax.tick_params(axis="both", which="major", length=4)
+                    ax.tick_params(axis="both", which="minor", length=2)
+
+            if ax_dv is not None:
+                ax_dv.set_ylim([-0.8, 0.8])
             ax_pa.set_ylim([-120, 120])
             ax_pa.set_yticks([-90, 0, 90])
             ax_pa.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
 
             ax_pr.margins(0.1, 0.1)
+            ax_pr.set_ylim([-0.4, 1.2])
             ax_pr.yaxis.set_major_locator(mpl.ticker.MultipleLocator(0.5))
             ax_pr.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(0.1))
 
+            if ax_dv is not None:
+                ax_dv.set_xticklabels([])
             ax_rm.set_xticklabels([])
             ax_pa.set_xticklabels([])
 
             if col % ncols == 0:
+                if ax_dv is not None:
+                    ax_dv.set_ylabel("$\Delta(V/I)$")
                 ax_rm.set_ylabel("RM\n[$\mathrm{rad}\,\mathrm{m}^{-2}$]")
                 ax_pa.set_ylabel("P.A.\n[deg]")
                 ax_pr.set_ylabel("Intensity\n[arbitrary units]")
@@ -196,18 +270,22 @@ def main(
 ) -> None:
     logger = psrutils.get_logger()
 
-    plt.rcParams["mathtext.fontset"] = "dejavuserif"
-    plt.rcParams["text.usetex"] = True
-    plt.rcParams["font.family"] = "serif"
-    plt.rcParams["font.serif"] = "cm"
-    plt.rcParams["font.size"] = 12
-
     # Filter out bad detections
     best_csvfiles = []
     for csvfile in csvfiles:
         data = np.loadtxt(csvfile, unpack=True, dtype=np.float64, delimiter=",")
-        mask = (data[6] > p0_cutoff) & ~np.isnan(data[9])
-        if len(data[9][mask]) > 0:
+        if data.shape[0] == 11:
+            p0 = data[6]
+            rm = data[9]
+            rm_err = data[10]
+        elif data.shape[0] == 14:
+            p0 = data[6]
+            rm = data[10]
+            rm_err = data[11]
+        mask = (p0 > p0_cutoff) & ~np.isnan(rm)
+        if len(rm[mask]) > 0:
+            rm_p2p = max_peak_to_peak(rm[mask], rm_err[mask])
+            logger.info(f"RM peak-to-peak = {rm_p2p}")
             best_csvfiles.append(csvfile)
     csvfiles = best_csvfiles
 

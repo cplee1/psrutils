@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pkg_resources
 from scipy.integrate import trapezoid
+from scipy.optimize import curve_fit
 from scipy.special import erf
+from uncertainties import correlated_values
 
 import psrutils
 
@@ -16,6 +18,7 @@ __all__ = [
     "lookup_sigma_pa",
     "compute_sigma_pa_table",
     "pa_dist",
+    "get_delta_vi",
 ]
 
 
@@ -109,7 +112,7 @@ def get_bias_corrected_pol_profile(
     cube: psrutils.StokesCube,
     windowsize: int | None = None,
     logger: logging.Logger | None = None,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Get the full polarisation profile and correct for bias in the linear
     polarisation degree and angle. If no polarisation information is found in
     the archive, then `None` will be returned for all outputs except for the
@@ -132,8 +135,10 @@ def get_bias_corrected_pol_profile(
         A 1xN array containing the debiased Stokes L for N bins.
     pa : `np.ndarray | None`
         A 2xN array containing the position angle value and uncertainty.
-    p0 : `np.ndarray | None`
-        A 1xN array containing the debiased polarisation measure L/sigma_I.
+    p0_l : `np.ndarray | None`
+        A 1xN array containing the debiased linear polarisation measure L/sigma_I.
+    p0_v : `np.ndarray | None`
+        A 1xN array containing the circular polarisation measure V/sigma_I.
     sigma_i : `float | None`
         The standard deviation of the offpulse noise in the Stokes I profile.
     """
@@ -144,7 +149,7 @@ def get_bias_corrected_pol_profile(
 
     # Default if the archive does not contain polarisation information
     if iquv_profile.shape[0] == 1:
-        return iquv_profile, None, None, None, None
+        return iquv_profile, None, None, None, None, None
 
     # Get the indices of the offpulse bins
     offpulse_win = psrutils.get_offpulse_region(
@@ -170,21 +175,22 @@ def get_bias_corrected_pol_profile(
     )
 
     # Bias-corrected polarisation measure
-    p0 = l_true / sigma_i
+    p0_l = l_true / sigma_i
+    p0_v = iquv_profile[3] / sigma_i
 
     # Position angle of linear polarisation
     # arctan2 is defined on [-pi, pi] radians
     pa = np.empty(shape=(2, iquv_profile.shape[1]), dtype=np.float64)
-    pa_unc_dist = lookup_sigma_pa(p0)
+    pa_unc_dist = lookup_sigma_pa(p0_l)
     pa[0, :] = 0.5 * np.arctan2(iquv_profile[2], iquv_profile[1])
     pa[1, :] = np.where(
-        p0 > 10,
-        0.5 / p0,
+        p0_l > 10,
+        0.5 / p0_l,
         pa_unc_dist,
     )
     pa = np.rad2deg(pa)
 
-    return iquv_profile, l_true, pa, p0, sigma_i
+    return iquv_profile, l_true, pa, p0_l, p0_v, sigma_i
 
 
 def lookup_sigma_pa(p0_meas: np.ndarray) -> np.ndarray:
@@ -303,3 +309,66 @@ def pa_dist(
     eta = p0 * 2 ** (-0.5) * np.cos(2 * (pa - pa_true))
     G_pa = k * (k + eta * np.exp(eta**2) * (1 + erf(eta))) * np.exp(-0.5 * p0**2)
     return G_pa
+
+
+def get_delta_vi(
+    cube: psrutils.StokesCube,
+    onpulse_win: np.ndarray | None = None,
+    logger: logging.Logger | None = None,
+) -> np.ndarray:
+    """Calculate the change in Stokes V/I over the observing bandwidth.
+
+    Parameters
+    ----------
+    cube : `psrutils.StokesCube`
+        A StokesCube object.
+    onpulse_win : `np.ndarray`, optional
+        A list of bins corresponding to the on-pulse region. Default: `None`.
+    logger : `logging.Logger`, optional
+        A logger to use. Default: `None`.
+
+    Returns
+    -------
+    delta_vi : `np.ndarray`
+        The change in Stokes V/I calculated per bin.
+    """
+    if logger is None:
+        logger = psrutils.get_logger()
+
+    freqs = cube.freqs / 1e6  # MHz
+    spectra = cube.subbands  # -> (pol, freq, phase)
+    vi_spectra = spectra[3] / spectra[0]
+    delta_vi = np.full((2, cube.num_bin), np.nan, dtype=np.float64)
+
+    for bin_idx in range(vi_spectra.shape[1]):
+        if bin_idx not in onpulse_win:
+            continue
+        vi_spectrum = vi_spectra[:, bin_idx]
+        ql, qh = np.quantile(vi_spectrum[~np.isnan(vi_spectrum)], q=(0.05, 0.95))
+        mask = (vi_spectrum > ql) & (vi_spectrum < qh)
+        try:
+            par, cov = curve_fit(
+                lambda f, c, m: f * m + c,
+                freqs[mask],
+                vi_spectrum[mask],
+                p0=(np.mean(vi_spectrum), 0.0),
+            )
+        except RuntimeError:
+            logger.debug(f"Bin {bin_idx}: Stokes V model fit could not converge.")
+            continue
+
+        (c_best, m_best) = correlated_values(par, cov)
+
+        # Filter out outliers
+        if np.abs(m_best.n) < 1e-4 or np.abs(m_best.n) > 1:
+            continue
+        if m_best.s < 1e-4 or m_best.s > 1:
+            continue
+
+        model = freqs * m_best + c_best
+        delta_vi_bin = model[-1] - model[0]
+
+        delta_vi[0, bin_idx] = delta_vi_bin.n
+        delta_vi[1, bin_idx] = delta_vi_bin.s
+
+    return delta_vi

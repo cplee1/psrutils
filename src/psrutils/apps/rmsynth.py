@@ -29,6 +29,7 @@ import psrutils
 @click.option(
     "--discard", type=float, nargs=2, help="Discard RM samples outside this range in rad/m^2."
 )
+@click.option("--clean_cutoff", type=float, default=3.0, help="RM-CLEAN component S/N cutoff.")
 @click.option("--meas_rm_prof", is_flag=True, help="Measure RM_prof.")
 @click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
 @click.option("--no_clean", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
@@ -55,6 +56,7 @@ def main(
     phi_plotlim: tuple[float, float],
     phase_plotlim: tuple[float, float],
     discard: tuple[float, float],
+    clean_cutoff: float,
     meas_rm_prof: bool,
     meas_rm_scat: bool,
     no_clean: bool,
@@ -123,7 +125,7 @@ def main(
         peak_mask = np.where(rm_phi_unc < rm_stats["rmsf_fwhm"] / 2, True, False)
 
         with open(f"{cube.source}_rm_phi.csv", "w") as f:
-            for meas, unc in zip(rm_phi_meas, rm_phi_unc):
+            for meas, unc in zip(rm_phi_meas, rm_phi_unc, strict=False):
                 f.write(f"{meas:.4f},{unc:.4f}\n")
 
         if boxplot:
@@ -190,11 +192,15 @@ def main(
     else:
         logger.info("Running RM-CLEAN")
         rmcln_result = psrutils.rm_clean(
-            phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, logger=logger
+            phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, cutoff=clean_cutoff, logger=logger
         )
         cln_fdf = rmcln_result[0]
         if plot_clean_comps:
             cln_comps = rmcln_result[2]
+
+    meas_delta_vi = True
+    if meas_delta_vi:
+        delta_vi = psrutils.get_delta_vi(cube, onpulse_win=onpulse_win, logger=logger)
 
     logger.info("Plotting")
     psrutils.plotting.plot_2d_fdf(
@@ -227,6 +233,7 @@ def main(
             rm_phi_qty=rm_phi_qty,
             rm_prof_qty=rm_prof_qty,
             rm_mask=peak_mask,
+            delta_vi=delta_vi,
             phase_range=phase_plotlim,
             p0_cutoff=p0_cutoff,
             savename=f"{cube.source}_pol_profile",

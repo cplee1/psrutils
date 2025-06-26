@@ -24,13 +24,6 @@ __all__ = [
 ]
 
 
-plt.rcParams["mathtext.fontset"] = "dejavuserif"
-plt.rcParams["text.usetex"] = True
-plt.rcParams["font.family"] = "serif"
-plt.rcParams["font.serif"] = "cm"
-plt.rcParams["font.size"] = 12
-
-
 def add_profile_to_axes(
     cube: psrutils.StokesCube,
     ax_pa: Axes | None = None,
@@ -43,18 +36,21 @@ def add_profile_to_axes(
     I_colour: str = "k",
     L_colour: str = "tab:red",
     V_colour: str = "tab:blue",
+    PA_colour: str = "k",
     alpha: float = 1.0,
     bin_func: Callable[[np.ndarray], np.ndarray] | None = None,
+    label: str = None,
     logger: logging.Logger | None = None,
 ) -> tuple[np.ndarray, tuple]:
     if plot_pol:
         profile_data = psrutils.get_bias_corrected_pol_profile(cube, logger=logger)
-        iquv_prof, l_prof, pa, p0, _ = profile_data
+        iquv_prof, l_prof, pa, p0_l, p0_v, sigma_i = profile_data
+
         if l_prof is None:
             plot_pol = False
     else:
         iquv_prof = cube.pol_profile
-        profile_data = (iquv_prof, None, None, None, None)
+        l_prof, pa, p0_l, p0_v, sigma_i = None, None, None, None, None
 
     bins = np.linspace(0, 1, cube.num_bin)
 
@@ -67,6 +63,7 @@ def add_profile_to_axes(
         iquv_prof /= peak_flux
         if plot_pol:
             l_prof /= peak_flux
+            sigma_i /= peak_flux
 
     if ax_prof is not None:
         ax_prof.plot(
@@ -99,21 +96,26 @@ def add_profile_to_axes(
             )
 
     if ax_pa is not None and plot_pol:
-        pa_mask = p0 > p0_cutoff
+        pa_mask = p0_l > p0_cutoff
         for offset in [0, -180, 180]:
+            if offset == 0:
+                ilabel = label
+            else:
+                ilabel = None
             ax_pa.errorbar(
                 x=bins[pa_mask],
                 y=pa[0, pa_mask] + offset,
                 yerr=pa[1, pa_mask],
-                color="k",
+                ecolor=PA_colour,
                 marker="none",
                 ms=1,
                 linestyle="none",
                 elinewidth=lw,
                 capthick=lw,
                 capsize=0,
+                label=ilabel,
             )
-    return bins, profile_data
+    return bins, (iquv_prof, l_prof, pa, p0_l, p0_v, sigma_i)
 
 
 def plot_profile(
@@ -209,6 +211,7 @@ def plot_pol_profile(
     rm_phi_qty: tuple[np.ndarray, np.ndarray] | None = None,
     rm_prof_qty: tuple[float, float] | None = None,
     rm_mask: np.ndarray | None = None,
+    delta_vi: np.ndarray | None = None,
     phase_range: tuple[float, float] | None = None,
     p0_cutoff: float | None = 3.0,
     savename: str = "pol_profile",
@@ -231,6 +234,8 @@ def plot_pol_profile(
     rm_mask : `np.ndarray`, optional
         An array of booleans to act as a mask for the measured RM values.
         Default: `None`.
+    delta_vi : `np.ndarray`, optional
+        The change in Stokes V/I over the bandwidth per bin. Default: `None`.
     phase_range : `tuple[float, float]`, optional
         The phase range in rotations. Default: [0, 1].
     p0_cutoff : `float`, optional
@@ -265,16 +270,25 @@ def plot_pol_profile(
         plot_rm = True
 
     # Define Figure and Axes
-    if plot_rm:
+    if plot_rm and delta_vi is not None:
+        fig = plt.figure(figsize=(6, 6.5), layout="tight", dpi=300)
+        gs = gridspec.GridSpec(ncols=1, nrows=4, figure=fig, height_ratios=(1, 1, 1, 3), hspace=0)
+        ax_rm = fig.add_subplot(gs[0])
+        ax_dv = fig.add_subplot(gs[1])
+        ax_pa = fig.add_subplot(gs[2])
+        ax_prof = fig.add_subplot(gs[3])
+    elif plot_rm:
         fig = plt.figure(figsize=(6, 5.6), layout="tight", dpi=300)
         gs = gridspec.GridSpec(ncols=1, nrows=3, figure=fig, height_ratios=(1, 1, 3), hspace=0)
         ax_rm = fig.add_subplot(gs[0])
+        ax_dv = None
         ax_pa = fig.add_subplot(gs[1])
         ax_prof = fig.add_subplot(gs[2])
     else:
         fig = plt.figure(figsize=(5, 4), layout="tight", dpi=300)
         gs = gridspec.GridSpec(ncols=1, nrows=2, figure=fig, height_ratios=(1, 2), hspace=0)
         ax_rm = None
+        ax_dv = None
         ax_pa = fig.add_subplot(gs[0])
         ax_prof = fig.add_subplot(gs[1])
 
@@ -290,33 +304,35 @@ def plot_pol_profile(
     bins, profile_data = psrutils.add_profile_to_axes(
         cube, ax_pa=ax_pa, ax_prof=ax_prof, p0_cutoff=p0_cutoff, lw=lw, logger=logger
     )
-    iquv_prof, l_prof, pa_prof, p0, _ = profile_data
+    iquv_prof, l_prof, pa_prof, p0_l, p0_v, sigma_i = profile_data
+
+    lw = 0.7
+    caplw = 0.7
+    scatter_params = dict(
+        color="k",
+        marker="none",
+        ms=1,
+        linestyle="none",
+        elinewidth=caplw,
+        capthick=caplw,
+        capsize=0,
+    )
 
     # Add RM
     if plot_rm:
         if rm_mask is None:
             rm_mask = np.full(rm_phi_qty[0].shape[0], True)
 
-        full_rm_mask = rm_mask & (p0 > p0_cutoff)
+        full_rm_mask = rm_mask & (p0_l > p0_cutoff)
 
         if rm_phi_qty[1] is not None:
             rm_phi_unc = np.abs(rm_phi_qty[1])[full_rm_mask]
-            marker = "none"
         else:
             rm_phi_unc = None
-            marker = "o"
+            scatter_params["marker"] = "o"
 
         ax_rm.errorbar(
-            x=bins[full_rm_mask],
-            y=rm_phi_qty[0][full_rm_mask],
-            yerr=rm_phi_unc,
-            color="k",
-            marker=marker,
-            ms=1,
-            linestyle="none",
-            elinewidth=lw,
-            capthick=lw,
-            capsize=0,
+            x=bins[full_rm_mask], y=rm_phi_qty[0][full_rm_mask], yerr=rm_phi_unc, **scatter_params
         )
 
         rm_lims = ax_rm.get_ylim()
@@ -337,9 +353,19 @@ def plot_pol_profile(
                 y1 = [0 - rmsf_fwhm / 2.0] * 2
                 y2 = [0 + rmsf_fwhm / 2.0] * 2
                 ax_rm.fill_between(phase_range, y1, y2, color=line_col, alpha=0.2, zorder=0)
-                ax_rm.axhline(y=0, linestyle="--", color=line_col, linewidth=lw, zorder=1)
+                ax_rm.axhline(y=0, linestyle=":", color=line_col, linewidth=lw, zorder=1)
 
         ax_rm.set_ylim(rm_lims)
+
+    # Plot Delta(V/I)
+    if ax_dv is not None:
+        ax_dv.errorbar(
+            x=bins,
+            y=delta_vi[0],
+            yerr=delta_vi[1],
+            **scatter_params,
+        )
+        ax_dv.axhline(y=0, linestyle=":", color=line_col, linewidth=lw, zorder=1)
 
     # Add text to profile to axis
     if plot_rm:
@@ -364,7 +390,7 @@ def plot_pol_profile(
     )
 
     # X limits
-    for iax in [ax_rm, ax_pa, ax_prof]:
+    for iax in [ax_rm, ax_dv, ax_pa, ax_prof]:
         if iax is not None:
             iax.set_xlim(phase_range)
 
@@ -374,10 +400,12 @@ def plot_pol_profile(
     # Ticks
     if plot_rm:
         ax_rm.set_xticklabels([])
+    if ax_dv is not None:
+        ax_dv.set_xticklabels([])
     ax_pa.set_xticklabels([])
     ax_pa.set_yticks([-90, 0, 90])
     ax_pa.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
-    for iax in [ax_rm, ax_pa, ax_prof]:
+    for iax in [ax_rm, ax_dv, ax_pa, ax_prof]:
         if iax is not None:
             iax.tick_params(which="both", right=True, top=True)
             iax.minorticks_on()
@@ -387,10 +415,12 @@ def plot_pol_profile(
 
     # Labels
     if plot_rm:
-        ax_rm.set_ylabel("RM [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+        ax_rm.set_ylabel("RM\n[$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+    if ax_dv is not None:
+        ax_dv.set_ylabel("$\Delta(V/I)$")
     ax_prof.set_xlabel("Pulse Phase")
-    ax_prof.set_ylabel("Normalised Flux Density")
-    ax_pa.set_ylabel("P.A. [deg]")
+    ax_prof.set_ylabel("Flux Density\n[arbitrary units]")
+    ax_pa.set_ylabel("P.A.\n[deg]")
 
     fig.align_ylabels()
 
@@ -410,19 +440,24 @@ def plot_pol_profile(
             header3 = f"rm_prof: {rm_prof_qty[0]} +- {rm_prof_qty[1]}"
         else:
             header3 = "rm_prof: nan +- nan"
-        header4 = "bin_idx,I,Q,U,V,L,P0,PA,PA_err,RM,RM_err"
-        header = "\n".join([header1, header2, header3, header4])
-        prof_array = np.empty(shape=(11, cube.num_bin), dtype=np.float64)
+        header4 = f"sigma_i: {sigma_i}"
+        header5 = "bin,I,Q,U,V,L,P0_L,P0_V,PA,PA_err,RM,RM_err,dvi,dvi_err"
+        header = "\n".join([header1, header2, header3, header4, header5])
+        prof_array = np.empty(shape=(14, cube.num_bin), dtype=np.float64)
         prof_array[0, :] = bins
         prof_array[1:5, :] = iquv_prof
         prof_array[5, :] = l_prof
-        prof_array[6, :] = p0
-        prof_array[7, :] = pa_prof[0]
-        prof_array[8, :] = pa_prof[1]
+        prof_array[6, :] = p0_l
+        prof_array[7, :] = p0_v
+        prof_array[8, :] = pa_prof[0]
+        prof_array[9, :] = pa_prof[1]
         if plot_rm:
-            prof_array[9, :] = np.where(rm_mask, rm_phi_qty[0], None)
+            prof_array[10, :] = np.where(rm_mask, rm_phi_qty[0], None)
             if rm_phi_qty[1] is not None:
-                prof_array[10, :] = np.where(rm_mask, rm_phi_qty[1], None)
+                prof_array[11, :] = np.where(rm_mask, rm_phi_qty[1], None)
+        if delta_vi is not None:
+            prof_array[12, :] = delta_vi[0]
+            prof_array[13, :] = delta_vi[1]
         logger.info(f"Saving data file: {savename}_data.csv")
         np.savetxt(f"{savename}_data.csv", prof_array.T, delimiter=",", header=header)
 
@@ -604,7 +639,9 @@ def plot_2d_fdf(
         cube.defaraday(rm_prof_qty[0])
 
     # Will by default use 1/8 of the profile to find offpulse noise
-    iquv_prof, l_prof, pa_prof, p0, _ = psrutils.get_bias_corrected_pol_profile(cube, logger=logger)
+    iquv_prof, l_prof, pa_prof, p0_l, _, _ = psrutils.get_bias_corrected_pol_profile(
+        cube, logger=logger
+    )
 
     bins = np.linspace(0, 1, cube.num_bin)
 
@@ -663,7 +700,7 @@ def plot_2d_fdf(
     ax_prof.text(
         0.03,
         0.91,
-        f"{cube.source}",
+        f"{cube.source.replace('-', '$-$')}",
         horizontalalignment="left",
         verticalalignment="top",
         transform=ax_prof.transAxes,
@@ -679,6 +716,8 @@ def plot_2d_fdf(
     if onpulse_win is not None and plot_onpulse:
         ylims = ax_prof.get_ylim()
         onpulse_win = onpulse_win.astype(float) / (cube.num_bin - 1)
+        if bin_func is not None:
+            onpulse_win = bin_func(onpulse_win)
         if onpulse_win[0] < onpulse_win[-1]:
             ax_prof.fill_betweenx(
                 ylims, onpulse_win[0], onpulse_win[-1], color="tab:blue", alpha=0.3, zorder=0
@@ -729,7 +768,7 @@ def plot_2d_fdf(
         if rm_mask is None:
             rm_mask = np.full(rm_phi_qty[0].shape[0], True)
 
-        full_rm_mask = rm_mask & (p0 > p0_cutoff)
+        full_rm_mask = rm_mask & (p0_l > p0_cutoff)
 
         if rm_phi_qty[1] is not None:
             rm_phi_unc = np.abs(rm_phi_qty[1])[full_rm_mask]
@@ -758,15 +797,16 @@ def plot_2d_fdf(
             ax_fdf_2d.errorbar(
                 x=[bins[bin_idx]] * len(fd_bin_idx_nonzero),
                 y=phi[fd_bin_idx_nonzero],
-                color="tab:orange",
+                color="tab:red",
                 marker="o",
-                ms=0.6,
+                mec="none",
+                ms=1.2,
                 linestyle="none",
             )
 
     # Position angle vs phase
     if plot_pa:
-        pa_mask = p0 > p0_cutoff
+        pa_mask = p0_l > p0_cutoff
         for offset in [0, -180, 180]:
             ax_pa.errorbar(
                 x=bins[pa_mask],
