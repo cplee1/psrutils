@@ -74,6 +74,7 @@ def main(
 
     logger.info(f"Loading archive: {archive}")
     cube = psrutils.StokesCube.from_psrchive(archive, False, 1, fscr, bscr, rotate)
+    logger.info(f"Number of bins: {cube.num_bin}")
 
     # Get off/on-pulse windows, assuming offpulse is 1/8 of profile
     offpulse_win = psrutils.get_offpulse_region(cube.profile, windowsize=offpulse_ws, logger=logger)
