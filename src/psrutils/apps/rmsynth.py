@@ -164,7 +164,7 @@ def main(
                 rm_prof_samples,
                 valid_samples=plot_valid_samples,
                 range=discard,
-                title=cube.source,
+                title=cube.source.replace("-", "$-$"),
                 savename=f"{cube.source}_rm_prof_hist",
                 save_pdf=save_pdf,
                 logger=logger,
