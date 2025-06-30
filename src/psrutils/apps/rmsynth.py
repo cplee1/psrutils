@@ -157,6 +157,7 @@ def main(
             rm_prof_unc = np.std(rm_prof_samples_valid)
             rm_prof_qty = (rm_prof_meas, rm_prof_unc)
 
+            logger.info(f"Saving CSV file: {cube.source}_rm_prof.csv")
             with open(f"{cube.source}_rm_prof.csv", "w") as f:
                 f.write(f"{cube.source},{rm_prof_meas:.4f},{rm_prof_unc:.4f}\n")
 
@@ -176,6 +177,7 @@ def main(
             rm_scat_meas = np.mean(rm_scat_samples)
             rm_scat_unc = np.std(rm_scat_samples)
 
+            logger.info(f"Saving CSV file: {cube.source}_rm_scat.csv")
             with open(f"{cube.source}_rm_scat.csv", "w") as f:
                 f.write(f"{cube.source},{rm_scat_meas:.4f},{rm_scat_unc:.4f}\n")
 
@@ -190,6 +192,10 @@ def main(
         rm_phi_qty = (rm_phi_samples, None)
         if meas_rm_prof:
             rm_prof_qty = (rm_prof_samples, None)
+
+            logger.info(f"Saving CSV file: {cube.source}_rm_prof.csv")
+            with open(f"{cube.source}_rm_prof.csv", "w") as f:
+                f.write(f"{cube.source},{rm_prof_samples:.4f},none\n")
         else:
             rm_prof_qty = None
         peak_mask = None
