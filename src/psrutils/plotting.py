@@ -877,6 +877,7 @@ def plot_2d_fdf(
     if plot_pa:
         ax_pa.set_xlabel(xlab)
         ax_pa.set_ylabel("P.A. [deg]")
+        fig.align_ylabels([ax_fdf_2d, ax_pa])
     else:
         ax_fdf_2d.set_xlabel(xlab)
     ax_fdf_2d.set_ylabel("Faraday Depth, $\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
