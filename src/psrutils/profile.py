@@ -344,7 +344,9 @@ def get_delta_vi(
         if bin_idx not in onpulse_win:
             continue
         vi_spectrum = vi_spectra[:, bin_idx]
-        ql, qh = np.quantile(vi_spectrum[~np.isnan(vi_spectrum)], q=(0.05, 0.95))
+        ql, qh = np.quantile(
+            vi_spectrum[~np.isnan(vi_spectrum) & np.isfinite(vi_spectrum)], q=(0.05, 0.95)
+        )
         mask = (vi_spectrum > ql) & (vi_spectrum < qh)
         try:
             par, cov = curve_fit(
