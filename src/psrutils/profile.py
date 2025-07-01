@@ -27,7 +27,7 @@ def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
 
 
 def get_offpulse_region(
-    data: np.ndarray, windowsize: int | None = None, logger: logging.Logger | None = None
+    profile: np.ndarray, windowsize: int | None = None, logger: logging.Logger | None = None
 ) -> np.ndarray:
     """Determine the off-pulse window by minimising the integral over a range.
     i.e., because noise should integrate towards zero, finding the region that
@@ -37,7 +37,7 @@ def get_offpulse_region(
 
     Parameters
     ----------
-    data : `np.ndarray`
+    profile : `np.ndarray`
         The original pulse profile.
     windowsize : `int`, optional
         Window width (in bins) defining the trial regions to integrate. Default: `None`
@@ -52,16 +52,16 @@ def get_offpulse_region(
     if logger is None:
         logger = psrutils.get_logger()
 
-    nbins = len(data)
+    nbins = len(profile)
 
     if windowsize is None:
         logger.debug("No off-pulse window size set, assuming 1/8 of profile.")
         windowsize = nbins // 8
 
-    integral = np.zeros_like(data)
+    integral = np.zeros_like(profile)
     for i in range(nbins):
         win = np.arange(i - windowsize // 2, i + windowsize // 2) % nbins
-        integral[i] = np.trapz(data[win])
+        integral[i] = np.trapz(profile[win])
 
     minidx = np.argmin(integral)
     offpulse_win = np.arange(minidx - windowsize // 2, minidx + windowsize // 2) % nbins
@@ -70,13 +70,13 @@ def get_offpulse_region(
 
 
 def get_onpulse_region(
-    data: np.ndarray, windowsize: int | None = None, logger: logging.Logger | None = None
+    profile: np.ndarray, windowsize: int | None = None, logger: logging.Logger | None = None
 ) -> np.ndarray:
     """Determine the on-pulse window by maximising the integral over a range.
 
     Parameters
     ----------
-    data : `np.ndarray`
+    profile : `np.ndarray`
         The original pulse profile.
     windowsize : `int`, optional
         Window width (in bins) defining the trial regions to integrate. Default: `None`
@@ -91,16 +91,16 @@ def get_onpulse_region(
     if logger is None:
         logger = psrutils.get_logger()
 
-    nbins = len(data)
+    nbins = len(profile)
 
     if windowsize is None:
         logger.debug("No off-pulse window size set, assuming 1/8 of profile.")
         windowsize = nbins // 8
 
-    integral = np.zeros_like(data)
+    integral = np.zeros_like(profile)
     for i in range(nbins):
         win = np.arange(i - windowsize // 2, i + windowsize // 2) % nbins
-        integral[i] = np.trapz(data[win])
+        integral[i] = np.trapz(profile[win])
 
     maxidx = np.argmax(integral)
     onpulse_win = np.arange(maxidx - windowsize // 2, maxidx + windowsize // 2) % nbins
