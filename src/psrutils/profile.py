@@ -1,8 +1,8 @@
+import importlib.resources
 import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pkg_resources
 from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.special import erf
@@ -209,7 +209,9 @@ def lookup_sigma_pa(p0_meas: np.ndarray) -> np.ndarray:
     sigma_meas : `np.ndarray`
         The uncertainties in the position angles in radians.
     """
-    sigma_pa_table = np.load(pkg_resources.resource_filename("psrutils", "data/sigma_pa_table.npy"))
+    ref = importlib.resources.files("psrutils") / "data/sigma_pa_table.npy"
+    with importlib.resources.as_file(ref) as path:
+        sigma_pa_table = np.load(path)
     sigma_meas = np.interp(p0_meas, sigma_pa_table[0], sigma_pa_table[1])
     return sigma_meas
 

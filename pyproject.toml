@@ -30,7 +30,7 @@ pu-shift-test = "psrutils.apps.shift_test:main"
 pu-rmsynth = "psrutils.apps.rmsynth:main"
 
 [build-system]
-requires = ["setuptools>=75.8,<81"]
+requires = ["setuptools>=75.8"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
