@@ -9,6 +9,8 @@ import psrutils
 
 @click.command()
 @click.argument("archives", nargs=-1, type=click.Path(exists=True))
+@click.help_option("-h", "--help")
+@click.version_option(psrutils.__version__, "-V", "--version")
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-c", "ncols", type=int, help="Number of columns.")
 @click.option("-r", "nrows", type=int, help="Number of rows.")

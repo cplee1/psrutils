@@ -7,6 +7,8 @@ import psrutils
 
 @click.command()
 @click.argument("archive", nargs=1, type=click.Path(exists=True))
+@click.help_option("-h", "--help")
+@click.version_option(psrutils.__version__, "-V", "--version")
 @click.option(
     "-L",
     "log_level",

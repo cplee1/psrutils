@@ -7,6 +7,8 @@ import psrutils
 
 @click.command()
 @click.argument("spec_file", nargs=1, type=click.Path(exists=True))
+@click.help_option("-h", "--help")
+@click.version_option(psrutils.__version__, "-V", "--version")
 def main(spec_file: str) -> None:
     spec = np.loadtxt(spec_file, dtype=str, delimiter=",")
     if spec.ndim == 1:

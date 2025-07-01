@@ -260,6 +260,8 @@ def make_figure(
 
 @click.command()
 @click.argument("csvfiles", nargs=-1, type=click.Path(exists=True))
+@click.help_option("-h", "--help")
+@click.version_option(psrutils.__version__, "-V", "--version")
 @click.option("-c", "ncols", type=int, help="Number of columns.")
 @click.option("-r", "nrows", type=int, help="Number of rows.")
 @click.option("-cs", "colsize", type=float, default=3.5, help="Size of each column.")
