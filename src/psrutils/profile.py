@@ -12,8 +12,7 @@ import psrutils
 
 __all__ = [
     "centre_offset_degrees",
-    "get_offpulse_region",
-    "get_onpulse_region",
+    "find_optimimum_pulse_window",
     "get_bias_corrected_pol_profile",
     "lookup_sigma_pa",
     "compute_sigma_pa_table",
@@ -26,12 +25,16 @@ def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
     return phase_bins * 360 - 180
 
 
-def get_offpulse_region(
-    profile: np.ndarray, windowsize: int | None = None, logger: logging.Logger | None = None
+def find_optimimum_pulse_window(
+    profile: np.ndarray,
+    windowsize: int | None = None,
+    maximise: bool = False,
+    logger: logging.Logger | None = None,
 ) -> np.ndarray:
-    """Determine the off-pulse window by minimising the integral over a range.
-    i.e., because noise should integrate towards zero, finding the region that
-    minimises the area mean it is representative of the noise level.
+    """Find the pulse window which minimises/maximises the integrated flux density
+    within it. Noise should integrate towards zero, so minimising the integral will
+    find an offpulse window. Conversely, maximising the integral will find an
+    onpulse window. The window size should be tweaked depending on the pulsar.
 
     Method taken from PyPulse (Lam, 2017. https://ascl.net/1706.011).
 
@@ -40,14 +43,17 @@ def get_offpulse_region(
     profile : `np.ndarray`
         The original pulse profile.
     windowsize : `int`, optional
-        Window width (in bins) defining the trial regions to integrate. Default: `None`
+        Window width (in bins) defining the trial regions to integrate. If `None`,
+        then will use 1/8 of the profile. Default: `None`
+    maximise : `bool`, optional
+        If `True`, will maximise the integral; otherwise, will minimise. Default: `False`.
     logger : `logging.Logger`, optional
         A logger to use. Default: `None`.
 
     Returns
     -------
-    offpulse_win : `np.ndarray`
-        A list of bins corresponding to the off-pulse region.
+    window_bins : `np.ndarray`
+        A list of bins corresponding to the located region.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -63,49 +69,12 @@ def get_offpulse_region(
         win = np.arange(i - windowsize // 2, i + windowsize // 2) % nbins
         integral[i] = np.trapz(profile[win])
 
-    minidx = np.argmin(integral)
-    offpulse_win = np.arange(minidx - windowsize // 2, minidx + windowsize // 2) % nbins
-
-    return offpulse_win
-
-
-def get_onpulse_region(
-    profile: np.ndarray, windowsize: int | None = None, logger: logging.Logger | None = None
-) -> np.ndarray:
-    """Determine the on-pulse window by maximising the integral over a range.
-
-    Parameters
-    ----------
-    profile : `np.ndarray`
-        The original pulse profile.
-    windowsize : `int`, optional
-        Window width (in bins) defining the trial regions to integrate. Default: `None`
-    logger : `logging.Logger`, optional
-        A logger to use. Default: `None`.
-
-    Returns
-    -------
-    onpulse_win : `np.ndarray`
-        A list of bins corresponding to the on-pulse region.
-    """
-    if logger is None:
-        logger = psrutils.get_logger()
-
-    nbins = len(profile)
-
-    if windowsize is None:
-        logger.debug("No off-pulse window size set, assuming 1/8 of profile.")
-        windowsize = nbins // 8
-
-    integral = np.zeros_like(profile)
-    for i in range(nbins):
-        win = np.arange(i - windowsize // 2, i + windowsize // 2) % nbins
-        integral[i] = np.trapz(profile[win])
-
-    maxidx = np.argmax(integral)
-    onpulse_win = np.arange(maxidx - windowsize // 2, maxidx + windowsize // 2) % nbins
-
-    return onpulse_win
+    if maximise:
+        maxidx = np.argmax(integral)
+        return np.arange(maxidx - windowsize // 2, maxidx + windowsize // 2) % nbins
+    else:
+        minidx = np.argmin(integral)
+        return np.arange(minidx - windowsize // 2, minidx + windowsize // 2) % nbins
 
 
 def get_bias_corrected_pol_profile(
@@ -152,8 +121,8 @@ def get_bias_corrected_pol_profile(
         return iquv_profile, None, None, None, None, None
 
     # Get the indices of the offpulse bins
-    offpulse_win = psrutils.get_offpulse_region(
-        iquv_profile[0], windowsize=windowsize, logger=logger
+    offpulse_win = psrutils.find_optimimum_pulse_window(
+        iquv_profile[0], windowsize=windowsize, maximise=False, logger=logger
     )
 
     # Create a profile mask to get the offpulse

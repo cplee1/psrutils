@@ -86,10 +86,14 @@ def main(
         cube.rotate_phase((max_idx - cube.num_bin // 2) / cube.num_bin)
 
     # Get off/on-pulse windows, assuming offpulse is 1/8 of profile
-    offpulse_win = psrutils.get_offpulse_region(cube.profile, windowsize=offpulse_ws, logger=logger)
+    offpulse_win = psrutils.find_optimimum_pulse_window(
+        cube.profile, windowsize=offpulse_ws, maximise=False, logger=logger
+    )
     logger.debug(f"Offpulse bin indices: {offpulse_win}")
     logger.info(f"Offpulse window size: {offpulse_win.size}")
-    onpulse_win = psrutils.get_onpulse_region(cube.profile, windowsize=onpulse_ws, logger=logger)
+    onpulse_win = psrutils.find_optimimum_pulse_window(
+        cube.profile, windowsize=onpulse_ws, maximise=True, logger=logger
+    )
     logger.debug(f"Onpulse bin indices: {onpulse_win}")
     logger.info(f"Onpulse window size: {onpulse_win.size}")
     psrutils.plot_profile(
