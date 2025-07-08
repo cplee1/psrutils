@@ -121,8 +121,10 @@ def add_profile_to_axes(
 def plot_profile(
     cube: psrutils.StokesCube,
     pol: int = 0,
-    offpulse_win: np.ndarray | None = None,
-    onpulse_win: np.ndarray | None = None,
+    offpulse_pairs: list | None = None,
+    onpulse_pairs: list | None = None,
+    noise_est: float | None = None,
+    sm_prof: np.ndarray | None = None,
     savename: str = "profile",
     save_pdf: bool = False,
     logger: logging.Logger | None = None,
@@ -135,10 +137,14 @@ def plot_profile(
         A StokesCube object.
     pol : `int`, optional
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
-    offpulse_win : `np.ndarray`, optional
-        The bin indices of the offpulse window. Default: `None`.
-    onpulse_win : `np.ndarray`, optional
-        The bin indices of the onpulse window. Default: `None`.
+    offpulse_pairs : `list`, optional
+        A list of pairs of bin indices defining the offpulse region(s). Default: `None`.
+    onpulse_pairs : `list`, optional
+        A list of pairs of bin indices defining the onpulse region(s). Default: `None`.
+    noise_est : `float`, optional
+        The standard deviation of the offpulse noise.
+    sm_prof : `np.ndarray`, optional
+        The smoothed pulse profile.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'profile'.
     save_pdf : `bool`, optional
@@ -155,37 +161,59 @@ def plot_profile(
     fig, ax = plt.subplots(dpi=300, tight_layout=True)
 
     bins = np.arange(cube.num_bin) / cube.num_bin
-    ax.plot(bins, cube.profile, color="k", linewidth=0.8)
     xlims = [bins[0], bins[-1]]
+
+    if sm_prof is None:
+        ax.plot(bins, cube.profile, color="k", linewidth=0.9, label="Profile")
+    else:
+        ax.plot(bins, cube.profile, color="k", alpha=0.3, linewidth=1, label="Profile")
+        ax.plot(bins, sm_prof, color="k", linewidth=0.9, label="Spline")
+
     ylims = ax.get_ylim()
 
-    if offpulse_win is not None:
-        offpulse_win = offpulse_win.astype(float) / (cube.num_bin - 1)
-        if offpulse_win[0] < offpulse_win[-1]:
-            ax.fill_betweenx(
-                ylims, offpulse_win[0], offpulse_win[-1], color="tab:red", alpha=0.4, zorder=0
-            )
-        else:
-            ax.fill_betweenx(
-                ylims, offpulse_win[0], xlims[-1], color="tab:red", alpha=0.4, zorder=0
-            )
-            ax.fill_betweenx(
-                ylims, xlims[0], offpulse_win[-1], color="tab:red", alpha=0.4, zorder=0
-            )
+    fill_args = dict(alpha=0.4, edgecolor="none", zorder=0)
+    if noise_est is not None:
+        ylims_op = [-abs(noise_est) / 2, abs(noise_est) / 2]
+    else:
+        yrange = ylims[-1] - ylims[0]
+        ylims_op = [-yrange / 20, yrange / 20]
 
-    if onpulse_win is not None:
-        onpulse_win = onpulse_win.astype(float) / (cube.num_bin - 1)
-        if onpulse_win[0] < onpulse_win[-1]:
-            ax.fill_betweenx(
-                ylims, onpulse_win[0], onpulse_win[-1], color="tab:blue", alpha=0.4, zorder=0
-            )
-        else:
-            ax.fill_betweenx(
-                ylims, onpulse_win[0], xlims[-1], color="tab:blue", alpha=0.4, zorder=0
-            )
-            ax.fill_betweenx(
-                ylims, xlims[0], onpulse_win[-1], color="tab:blue", alpha=0.4, zorder=0
-            )
+    if offpulse_pairs is not None:
+        for ii, pair in enumerate(offpulse_pairs):
+            pair = [pair[0] / cube.num_bin, pair[1] / cube.num_bin]
+            if ii == 0:
+                label = "Offpulse"
+            else:
+                label = None
+            if pair[0] < pair[-1]:
+                ax.fill_betweenx(
+                    ylims_op, pair[0], pair[-1], color="tab:red", label=label, **fill_args
+                )
+            else:
+                ax.fill_betweenx(
+                    ylims_op, pair[0], xlims[-1], color="tab:red", label=label, **fill_args
+                )
+                ax.fill_betweenx(ylims_op, xlims[0], pair[-1], color="tab:red", **fill_args)
+
+    if onpulse_pairs is not None:
+        for ii, pair in enumerate(onpulse_pairs):
+            pair = [pair[0] / cube.num_bin, pair[1] / cube.num_bin]
+            if ii == 0:
+                label = "Onpulse"
+            else:
+                label = None
+            if pair[0] < pair[-1]:
+                ax.fill_betweenx(
+                    ylims_op, pair[0], pair[-1], color="tab:blue", label=label, **fill_args
+                )
+            else:
+                ax.fill_betweenx(
+                    ylims_op, pair[0], xlims[-1], color="tab:blue", label=label, **fill_args
+                )
+                ax.fill_betweenx(ylims_op, xlims[0], pair[-1], color="tab:blue", **fill_args)
+
+    if onpulse_pairs is not None or offpulse_pairs is not None:
+        ax.legend(loc="upper right")
 
     # Plot the noise floor
     ax.axhline(0, linestyle="--", linewidth=0.8, color="k")
@@ -569,7 +597,7 @@ def plot_2d_fdf(
     rmsf_fwhm: float,
     rm_phi_qty: tuple | None = None,
     rm_prof_qty: tuple | None = None,
-    onpulse_win: np.ndarray | None = None,
+    onpulse_pairs: list | None = None,
     rm_mask: np.ndarray | None = None,
     cln_comps: np.ndarray | None = None,
     plot_peaks: bool = False,
@@ -600,8 +628,8 @@ def plot_2d_fdf(
         The RM measurements and uncertainties for each phase bin. Default: `None`.
     rm_prof_qty : `tuple[float, float]`, optional
         The RM measurement and uncertainty for the profile. Default: `None`.
-    onpulse_win : `np.ndarray`, optional
-        An array of bin indices defining the onpulse window. If `None`, will use the
+    onpulse_pairs : `list`, optional
+        An list of bin index pairs defining the onpulse region(s). If `None`, will use the
         full phase range. Default: `None`.
     rm_mask : `np.ndarray`, optional
         An array of booleans to act as a mask for the measured RM values.
@@ -649,10 +677,11 @@ def plot_2d_fdf(
     if bin_func is not None:
         bins = bin_func(bins)
 
-    if onpulse_win is None:
+    if onpulse_pairs is None:
         fdf_amp_1Dy = fdf_amp_2D.mean(0)
     else:
-        fdf_amp_1Dy = fdf_amp_2D[onpulse_win].mean(0)
+        onpulse_mask = psrutils.get_profile_mask_from_pairs(cube.num_bin, onpulse_pairs)
+        fdf_amp_1Dy = fdf_amp_2D[onpulse_mask].mean(0)
 
     # Styles
     lw = 0.6
@@ -713,23 +742,21 @@ def plot_2d_fdf(
     #     verticalalignment="top",
     #     transform=ax_prof.transAxes,
     # )
-    if onpulse_win is not None and plot_onpulse:
+    if onpulse_pairs is not None and plot_onpulse:
         ylims = ax_prof.get_ylim()
-        onpulse_win = onpulse_win.astype(float) / (cube.num_bin - 1)
-        if bin_func is not None:
-            onpulse_win = bin_func(onpulse_win)
-        if onpulse_win[0] < onpulse_win[-1]:
-            ax_prof.fill_betweenx(
-                ylims, onpulse_win[0], onpulse_win[-1], color="tab:blue", alpha=0.3, zorder=0
-            )
-        else:
-            ax_prof.fill_betweenx(
-                ylims, onpulse_win[0], bins[-1], color="tab:blue", alpha=0.2, zorder=0
-            )
-            ax_prof.fill_betweenx(
-                ylims, bins[0], onpulse_win[-1], color="tab:blue", alpha=0.2, zorder=0
-            )
-        ax_prof.set_ylim(ylims)
+        fill_args = dict(color="tab:blue", alpha=0.3, zorder=0)
+        for op_pair in onpulse_pairs:
+            op_l = op_pair[0] / (cube.num_bin - 1)
+            op_r = op_pair[1] / (cube.num_bin - 1)
+            if bin_func is not None:
+                op_l = bin_func(op_l)
+                op_r = bin_func(op_r)
+            if op_l < op_r:
+                ax_prof.fill_betweenx(ylims, op_l, op_r, **fill_args)
+            else:
+                ax_prof.fill_betweenx(ylims, op_l, bins[-1], **fill_args)
+                ax_prof.fill_betweenx(ylims, bins[0], op_r, **fill_args)
+            ax_prof.set_ylim(ylims)
 
     # Plot 1D Y FDF
     ax_fdf_1dy.plot(fdf_amp_1Dy, phi, color=line_col, linewidth=lw)

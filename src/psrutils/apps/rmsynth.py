@@ -21,8 +21,19 @@ import psrutils
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
 @click.option("-c", "centre", is_flag=True, help="Centre the pulse.")
-@click.option("--w_off", "offpulse_ws", type=int, help="The size of the offpulse window in bins.")
-@click.option("--w_on", "onpulse_ws", type=int, help="The size of the onpulse window in bins.")
+@click.option(
+    "--w_off",
+    "offpulse_ws",
+    type=int,
+    help="The window size used to find the offpulse noise using the flux minimisation method.",
+)
+@click.option(
+    "--w_on",
+    "onpulse_ws",
+    type=int,
+    help="The window size used to find the onpulse using the flux maximisation method. "
+    + "By default, will automatically determine the onpulse using the differentiation method.",
+)
 @click.option("--rmlim", type=float, default=100.0, help="RM limit.")
 @click.option("--rmres", type=float, default=0.01, help="RM resolution.")
 @click.option("-n", "nsamp", type=int, help="The number of bootstrap samples.")
@@ -85,21 +96,48 @@ def main(
         max_idx = np.argmax(cube.profile)
         cube.rotate_phase((max_idx - cube.num_bin // 2) / cube.num_bin)
 
-    # Get off/on-pulse windows, assuming offpulse is 1/8 of profile
-    offpulse_win = psrutils.find_optimimum_pulse_window(
-        cube.profile, windowsize=offpulse_ws, maximise=False, logger=logger
-    )
-    logger.debug(f"Offpulse bin indices: {offpulse_win}")
-    logger.info(f"Offpulse window size: {offpulse_win.size}")
-    onpulse_win = psrutils.find_optimimum_pulse_window(
-        cube.profile, windowsize=onpulse_ws, maximise=True, logger=logger
-    )
-    logger.debug(f"Onpulse bin indices: {onpulse_win}")
-    logger.info(f"Onpulse window size: {onpulse_win.size}")
+    # Default to minimum/maximum flux method
+    onpulse_pairs = None
+    offpulse_pairs = None
+    sm_prof = None
+
+    if onpulse_ws is None:
+        # Estimate both the onpulse by smoothing the profile and locating the minima flanking the
+        # real maxima. The offpulse is then all non-onpulse bins.
+        onpulse_pairs, offpulse_pairs, noise_est, sm_prof = psrutils.find_onpulse_regions_bootstrap(
+            cube.profile,
+            sigma_cutoff=2.0,
+            logger=logger,
+        )
+
+    if onpulse_pairs is None:
+        # Get the onpulse
+        onpulse_pair = psrutils.find_optimal_pulse_window(
+            cube.profile, windowsize=onpulse_ws, maximise=True, logger=logger
+        )
+        onpulse_pairs = [onpulse_pair]
+
+    if offpulse_pairs is None:
+        # Get the offpulse - if offpulse_ws is None, then assume a window size of 1/8 of profile
+        offpulse_pair = psrutils.find_optimal_pulse_window(
+            cube.profile, windowsize=offpulse_ws, maximise=False, logger=logger
+        )
+        offpulse_pairs = [offpulse_pair]
+        noise_est = np.nanstd(psrutils.mask_profile_region_from_pairs(cube.profile, offpulse_pairs))
+
+    # Use the bin pairs to get all bins in the onpulse and offpulse regions
+    onpulse_mask = psrutils.get_profile_mask_from_pairs(cube.num_bin, onpulse_pairs)
+    offpulse_mask = psrutils.get_profile_mask_from_pairs(cube.num_bin, offpulse_pairs)
+    bins = np.arange(cube.num_bin)
+    onpulse_bins = bins[onpulse_mask]
+    offpulse_bins = bins[offpulse_mask]
+
     psrutils.plot_profile(
         cube,
-        offpulse_win=offpulse_win,
-        onpulse_win=onpulse_win,
+        offpulse_pairs=offpulse_pairs,
+        onpulse_pairs=onpulse_pairs,
+        noise_est=noise_est,
+        sm_prof=sm_prof,
         savename=f"{cube.source}_profile",
         save_pdf=save_pdf,
         logger=logger,
@@ -110,11 +148,11 @@ def main(
     rmsyn_result = psrutils.rm_synthesis(
         cube,
         phi,
-        onpulse_win=onpulse_win,
         meas_rm_prof=meas_rm_prof,
         meas_rm_scat=meas_rm_scat,
         bootstrap_nsamp=nsamp,
-        offpulse_win=offpulse_win,
+        onpulse_bins=onpulse_bins,
+        offpulse_bins=offpulse_bins,
         logger=logger,
     )
     fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
@@ -220,7 +258,7 @@ def main(
 
     meas_delta_vi = True
     if meas_delta_vi:
-        delta_vi = psrutils.get_delta_vi(cube, onpulse_win=onpulse_win, logger=logger)
+        delta_vi = psrutils.get_delta_vi(cube, onpulse_bins=onpulse_bins, logger=logger)
 
     logger.info("Plotting")
     psrutils.plotting.plot_2d_fdf(
@@ -230,7 +268,7 @@ def main(
         rmsf_fwhm=rm_stats["rmsf_fwhm"],
         rm_phi_qty=rm_phi_qty,
         rm_prof_qty=rm_prof_qty,
-        onpulse_win=onpulse_win,
+        onpulse_pairs=onpulse_pairs,
         rm_mask=peak_mask,
         cln_comps=cln_comps,
         plot_peaks=peaks,

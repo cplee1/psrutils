@@ -14,14 +14,18 @@ import psrutils
 
 __all__ = [
     "centre_offset_degrees",
-    "find_optimimum_pulse_window",
+    "find_optimal_pulse_window",
     "get_offpulse_noise",
+    "find_onpulse_regions_bootstrap",
+    "sigma_clip",
     "find_onpulse_regions",
     "get_bias_corrected_pol_profile",
     "lookup_sigma_pa",
     "compute_sigma_pa_table",
     "pa_dist",
     "get_delta_vi",
+    "mask_profile_region_from_pairs",
+    "get_profile_mask_from_pairs",
 ]
 
 
@@ -29,7 +33,7 @@ def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
     return phase_bins * 360 - 180
 
 
-def find_optimimum_pulse_window(
+def find_optimal_pulse_window(
     profile: np.ndarray,
     windowsize: int | None = None,
     maximise: bool = False,
@@ -45,7 +49,7 @@ def find_optimimum_pulse_window(
     Parameters
     ----------
     profile : `np.ndarray`
-        The original pulse profile.
+        The pulse profile.
     windowsize : `int`, optional
         Window width (in bins) defining the trial regions to integrate. If `None`,
         then will use 1/8 of the profile. Default: `None`
@@ -56,8 +60,10 @@ def find_optimimum_pulse_window(
 
     Returns
     -------
-    window_bins : `np.ndarray`
-        A list of bins corresponding to the located region.
+    left_idx : `int`
+        The bin index of the leading edge of the window.
+    right_idx : `int`
+        The bin index of the trailing edge of the window.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -74,70 +80,171 @@ def find_optimimum_pulse_window(
         integral[i] = np.trapz(profile[win])
 
     if maximise:
-        maxidx = np.argmax(integral)
-        return np.arange(maxidx - windowsize // 2, maxidx + windowsize // 2) % nbins
+        opt_idx = np.argmax(integral)
     else:
-        minidx = np.argmin(integral)
-        return np.arange(minidx - windowsize // 2, minidx + windowsize // 2) % nbins
+        opt_idx = np.argmin(integral)
+
+    left_idx = (opt_idx - windowsize // 2) % nbins
+    right_idx = (opt_idx + windowsize // 2) % nbins
+    return left_idx, right_idx
 
 
-def get_offpulse_noise(profile: np.ndarray, logger: logging.Logger | None = None):
-    if logger is None:
-        logger = psrutils.get_logger()
-
-    offpulse_win = psrutils.find_optimimum_pulse_window(profile, logger=logger)
-
-    # Create a profile mask to get the offpulse
-    offpulse_mask = np.full(profile.size, False)
-    for bin_idx in offpulse_win:
-        offpulse_mask[bin_idx] = True
-
-    # Standard deviation of the noise in the offpulse window
-    return np.std(profile[offpulse_mask])
-
-
-def find_onpulse_regions(
-    profile: np.ndarray,
-    sigma_cutoff: float = 2.0,
-    plotname: str = None,
-    logger: logging.Logger | None = None,
-) -> dict:
-    """Find under- and over-estimates of the onpulse regions from a PPoly representation
-    of a smoothed profile.
+def get_offpulse_noise(
+    profile: np.ndarray, windowsize: int | None = None, logger: logging.Logger | None = None
+) -> float:
+    """Estimate the standard deviation of the offpulse noise using the flux integration method.
 
     Parameters
     ----------
     profile : `np.ndarray`
-        The total intensity profile.
-    sigma_cutoff : `float`, optional
-        The number of standard deviations above which a signal will be considered real.
-        Default: 2.0.
-    plotname : `str`, optional
-        If provided, will save a plot of the smoothed profile and its derivatives with
-        this plot name. The file extension should be excluded.
+        The pulse profile.
+    windowsize : `int`, optional
+        Window width (in bins) defining the trial regions to integrate. If `None`,
+        then will use 1/8 of the profile. Default: `None`
     logger : `logging.Logger`, optional
         A logger to use. Default: `None`.
 
     Returns
     -------
-    results: `dict`
-        A dictionary containing the following:
-
-        "bins" : The bins at which the profile was evaluated at.
-        "sm_prof" : The evaluated smoothed profile.
-        "d1_sm_prof" : The first derivative of sm_prof.
-        "d2_sm_prof" : The second derivative of sm_prof.
-        "underest_onpulse" : A list of pairs of underestimated onpulse bin indices.
-        "overest_onpulse" : A list of pairs of overestimated onpulse bin indices.
+    noise_est : `float`
+        The standard deviation of the offpulse noise.
     """
     if logger is None:
         logger = psrutils.get_logger()
 
-    # Normalise profile
-    profile /= np.max(profile)
+    op_l, op_r = psrutils.find_optimal_pulse_window(profile, windowsize=windowsize, logger=logger)
 
-    # Get offpulse noise using sliding window method
-    noise_est = psrutils.get_offpulse_noise(profile, logger=logger)
+    bins = np.arange(profile.size)
+
+    if op_r > op_l:
+        mask = np.where(np.logical_and(bins > op_l, bins < op_r), True, False)
+    else:
+        mask = np.where(np.logical_or(bins > op_l, bins < op_r), True, False)
+
+    # Standard deviation of the noise in the offpulse window
+    return np.std(profile[mask])
+
+
+def sigma_clip(
+    profile: np.ndarray,
+    alpha: float = 3.0,
+    tol: float = 0.1,
+    ntrials: int = 10,
+    logger: logging.Logger | None = None,
+) -> tuple[float, np.ndarray]:
+    """Determine the offpulse noise using sigma clipping.
+
+    Compute the data's median, m, and its standard deviation, sigma. Keep only the data
+    that falls in the range (m-alpha*sigma, m+alpha*sigma) for some value of alpha, and
+    discard everything else. This operation is repeated ntrials number of times or until
+    the fractional change in sigma between sequential iterations reaches a set tolerance.
+
+    Parameters
+    ----------
+    profile : `np.ndarray`
+        The profile to clip.
+    alpha : `float`, optional
+        The number of standard deviations to clip above and below. Default: 3.0.
+    tol : `float`, optional
+        The tolerance, i.e. the fractional change in standard deviations between trials
+        which determines the stopping condition. Default: 0.1.
+    ntrials : `int`, optional
+        The maximum number of clipping iterations. Default: 10.
+    logger : `logging.Logger`, optional
+        A logger to use. Default: `None`.
+
+    Returns
+    -------
+    oldstd `float`
+        The standard deviation of the clipped profile.
+    clipped_profile: `np.ndarray`
+        The profile with NaNs in place of the onpulse bins.
+    """
+    if logger is None:
+        logger = psrutils.get_logger()
+
+    x = np.copy(profile)
+    oldstd = np.nanstd(x)
+
+    # Suppress the warning raised when x[x<lolim] and x[x>hilim] are called. This
+    # warning is expected as it is ignoring the flagged samples from previous trials.
+    old_settings = np.seterr(all="ignore")
+
+    for trial in range(ntrials):
+        median = np.nanmedian(x)
+        lolim = median - alpha * oldstd
+        hilim = median + alpha * oldstd
+        x[x < lolim] = np.nan
+        x[x > hilim] = np.nan
+
+        newstd = np.nanstd(x)
+        tollvl = (oldstd - newstd) / newstd
+
+        if tollvl <= tol:
+            logger.debug(f"Took {trial + 1} trials to reach tolerance")
+            np.seterr(**old_settings)
+            return oldstd, x
+
+        if trial + 1 == ntrials:
+            logger.debug("Reached number of trials without reaching tolerance level")
+            np.seterr(**old_settings)
+            return oldstd, x
+
+        oldstd = newstd
+
+
+def find_onpulse_regions(
+    profile: np.ndarray,
+    initial_noise_est: float | None = None,
+    sigma_cutoff: float = 2.0,
+    windowsize: int | None = None,
+    plotname: str = None,
+    logger: logging.Logger | None = None,
+) -> tuple[list, list, list]:
+    """Find under- and over-estimates of the onpulse regions from a PPoly representation
+    of a smoothed profile. If true maxima cannot be found (i.e. no maxima exceed the cutoff),
+    then `None` will be returned for each of the outputs.
+
+    Parameters
+    ----------
+    profile : `np.ndarray`
+        The total intensity pulse profile.
+    sigma_cutoff : `float`, optional
+        The number of standard deviations above which a signal will be considered real.
+        Default: 2.0.
+    windowsize : `int`, optional
+        Window width (in bins) defining the window size to use to make an initial onpulse
+        noise estimate. If `None`, then will use 1/8 of the profile. Default: `None`.
+    plotname : `str`, optional
+        If provided, will save a plot of the smoothed profile, its derivatives, and the
+        onpulse estimates. The file extension should be excluded.
+    logger : `logging.Logger`, optional
+        A logger to use. Default: `None`.
+
+    Returns
+    -------
+    underest_onpulse_pairs : `list` | `None`
+        A list of pairs of bin indices defining the underestimated onpulse region.
+        May miss some onpulse but will not include any offpulse.
+    overest_onpulse_pairs : `list` | `None`
+        A list of pairs of bin indices defining the overestimated onpulse region.
+        May include some offpulse but will not miss any onpulse.
+    offpulse_pairs : `list` | `None`
+        A list of pairs of bin indices defining the offpulse. These pairs are the
+        opposite of the 'overest_onpulse_pairs'.
+    noise_est : `float` | `None`
+        The standard deviation of the offpulse noise.
+    sm_prof : `np.ndarray` | `None`
+        The smoothed pulse profile.
+    """
+    if logger is None:
+        logger = psrutils.get_logger()
+
+    if initial_noise_est is None:
+        # Get offpulse noise using sliding window method
+        initial_noise_est = psrutils.get_offpulse_noise(
+            profile, windowsize=windowsize, logger=logger
+        )
 
     # Bins
     nbin = profile.size
@@ -145,7 +252,7 @@ def find_onpulse_regions(
 
     # Fit a degree-k smoothing spline in the B-spline basis with periodic boundary
     # conditions
-    tck = splrep(bins, profile, k=5, s=nbin * noise_est**2, per=True)
+    tck = splrep(bins, profile, k=5, s=nbin * initial_noise_est**2, per=True)
     splrep_bspl = BSpline(*tck, extrapolate="periodic")
 
     # Convert to a piecewise degree-k polynomial representation, which has a better
@@ -153,20 +260,83 @@ def find_onpulse_regions(
     splrep_ppoly = PPoly.from_spline(splrep_bspl, extrapolate="periodic")
 
     # Find the onpulse regions
-    opr_result = _find_onpulse_regions_from_ppoly(
-        bins, splrep_ppoly, noise_est, sigma_cutoff=sigma_cutoff, logger=logger
+    underest_onpulse_pairs, overest_onpulse_pairs, plot_dict = _find_onpulse_regions_from_ppoly(
+        bins, splrep_ppoly, initial_noise_est, sigma_cutoff=sigma_cutoff, logger=logger
     )
 
-    if plotname:
+    if overest_onpulse_pairs is not None:
+        # Find the underestimated offpulse, which shouldn't contain any pulsar flux
+        offpulse_pairs = _get_offpulse_from_onpulse(overest_onpulse_pairs)
+        noise_est = np.nanstd(mask_profile_region_from_pairs(profile, offpulse_pairs))
+    else:
+        offpulse_pairs = None
+        noise_est = None
+
+    # If a plotname is provided, save a plot showing the smoothed profile, its
+    # derivatives, and the onpulse estimates
+    if plot_dict is not None and plotname:
         _plot_onpulse_regions(
-            opr_result,
+            plot_dict,
             profile,
-            plot_underestimate=False,
+            noise_est,
             savename=plotname,
             logger=logger,
         )
 
-    return opr_result
+    if plot_dict is not None:
+        sm_prof = plot_dict["sm_prof"]
+    else:
+        sm_prof = None
+
+    return (
+        underest_onpulse_pairs,
+        overest_onpulse_pairs,
+        offpulse_pairs,
+        noise_est,
+        sm_prof,
+    )
+
+
+def find_onpulse_regions_bootstrap(
+    profile: np.ndarray,
+    ntrials: int = 5,
+    tol: float = 0.1,
+    sigma_cutoff: float = 2.0,
+    logger: logging.Logger | None = None,
+):
+    old_noise_est = None
+    logger.debug("Bootstrapping to estimate on/off-pulse and noise")
+    for trial in range(ntrials):
+        _, onpulse_pairs, offpulse_pairs, new_noise_est, sm_prof = psrutils.find_onpulse_regions(
+            profile,
+            initial_noise_est=old_noise_est,
+            sigma_cutoff=sigma_cutoff,
+            logger=logger,
+        )
+        if onpulse_pairs is None:
+            # If no valid maxima were found, then the profile must be very scattered or noisy.
+            # Therefore, assume the whole profile is the onpulse.
+            onpulse_pairs = [[0, profile.size - 1]]
+            break
+
+        if old_noise_est is not None:
+            tollvl = abs((old_noise_est - new_noise_est) / new_noise_est)
+            logger.debug(f"iteration {trial}: {tollvl=}")
+            tolcol = tollvl <= tol
+        else:
+            tolcol = False
+
+        if tolcol:
+            logger.debug(f"Took {trial + 1} trials to reach tolerance")
+            break
+
+        if trial + 1 == ntrials:
+            logger.debug("Reached number of trials without reaching tolerance level")
+            break
+
+        old_noise_est = new_noise_est
+
+    return onpulse_pairs, offpulse_pairs, new_noise_est, sm_prof
 
 
 def get_bias_corrected_pol_profile(
@@ -213,7 +383,7 @@ def get_bias_corrected_pol_profile(
         return iquv_profile, None, None, None, None, None
 
     # Get the indices of the offpulse bins
-    offpulse_win = psrutils.find_optimimum_pulse_window(
+    offpulse_win = psrutils.find_optimal_pulse_window(
         iquv_profile[0], windowsize=windowsize, maximise=False, logger=logger
     )
 
@@ -376,7 +546,7 @@ def pa_dist(
 
 def get_delta_vi(
     cube: psrutils.StokesCube,
-    onpulse_win: np.ndarray | None = None,
+    onpulse_bins: np.ndarray | None = None,
     logger: logging.Logger | None = None,
 ) -> np.ndarray:
     """Calculate the change in Stokes V/I over the observing bandwidth.
@@ -385,7 +555,7 @@ def get_delta_vi(
     ----------
     cube : `psrutils.StokesCube`
         A StokesCube object.
-    onpulse_win : `np.ndarray`, optional
+    onpulse_bins : `np.ndarray`, optional
         A list of bins corresponding to the on-pulse region. Default: `None`.
     logger : `logging.Logger`, optional
         A logger to use. Default: `None`.
@@ -404,7 +574,7 @@ def get_delta_vi(
     delta_vi = np.full((2, cube.num_bin), np.nan, dtype=np.float64)
 
     for bin_idx in range(vi_spectra.shape[1]):
-        if bin_idx not in onpulse_win:
+        if bin_idx not in onpulse_bins:
             continue
         vi_spectrum = vi_spectra[:, bin_idx]
         ql, qh = np.quantile(
@@ -437,6 +607,44 @@ def get_delta_vi(
         delta_vi[1, bin_idx] = delta_vi_bin.s
 
     return delta_vi
+
+
+def mask_profile_region_from_pairs(profile: np.ndarray, bin_pairs: list) -> np.ndarray:
+    """Return a profile with the regions defined by the bin_pairs filled with NaNs.
+
+    Parameters
+    ----------
+    profile : `np.ndarray`
+        The profile to mask.
+    bin_pairs : `list`
+        A list of pairs of bin indices defining the profile regions.
+
+    Returns
+    -------
+    masked_profile : `np.ndarray`
+        The profile with the regions between the bin pairs filled with Nans.
+    """
+    bins = np.arange(profile.size)
+    mask = np.full(profile.size, False)
+    for pair in bin_pairs:
+        if pair[0] < pair[1]:
+            mask = np.logical_or(mask, np.logical_and(bins > pair[0], bins < pair[1]))
+        else:
+            mask = np.logical_or(mask, bins > pair[0])
+            mask = np.logical_or(mask, bins < pair[1])
+    return np.where(mask, profile, np.nan)
+
+
+def get_profile_mask_from_pairs(nbin: int, bin_pairs: list):
+    bins = np.arange(nbin)
+    mask = np.full(nbin, False)
+    for pair in bin_pairs:
+        if pair[0] < pair[1]:
+            mask = np.logical_or(mask, np.logical_and(bins > pair[0], bins < pair[1]))
+        else:
+            mask = np.logical_or(mask, bins > pair[0])
+            mask = np.logical_or(mask, bins < pair[1])
+    return mask
 
 
 def _fill_onpulse_regions(
@@ -514,8 +722,9 @@ def _fill_onpulse_regions(
 
 
 def _plot_onpulse_regions(
-    opr_result: dict,
+    plot_dict: dict,
     real_prof: np.ndarray,
+    noise_est: float,
     plot_underestimate: bool = True,
     plot_overestimate: bool = True,
     lw: float = 1.2,
@@ -526,10 +735,12 @@ def _plot_onpulse_regions(
 
     Parameters
     ----------
-    opr_result: dict
-        A results dictionary from `_find_onpulse_regions_from_ppoly()`.
+    plot_dict: dict
+        A plot dictionary from `_find_onpulse_regions_from_ppoly()`.
     real_prof : np.ndarray
-        The real profile, with the same number of bins as the opr_result.
+        The real profile, with the same number of bins as the plot_dict.
+    noise_est : `float`
+        An estimate of the standard deviation of the offpulse noise.
     plot_underestimate : `bool`
         Whether to plot the onpulse underestimate. Default: `True`.
     plot_overestimate : `bool`
@@ -541,12 +752,12 @@ def _plot_onpulse_regions(
     logger : `logging.Logger`, optional
         A logger to use. Default: `None`.
     """
-    bins = opr_result["bins"]
-    sm_prof = opr_result["sm_prof"]
-    d1_sm_prof = opr_result["d1_sm_prof"]
-    d2_sm_prof = opr_result["d2_sm_prof"]
-    underest_onpulse = opr_result["underest_onpulse"]
-    overest_onpulse = opr_result["overest_onpulse"]
+    bins = plot_dict["bins"]
+    sm_prof = plot_dict["sm_prof"]
+    d1_sm_prof = plot_dict["d1_sm_prof"]
+    d2_sm_prof = plot_dict["d2_sm_prof"]
+    underest_onpulse = plot_dict["underest_onpulse"]
+    overest_onpulse = plot_dict["overest_onpulse"]
 
     # Figure setup
     fig, axes = plt.subplots(nrows=3, figsize=(8, 7), sharex=True, dpi=300, tight_layout=True)
@@ -557,8 +768,12 @@ def _plot_onpulse_regions(
     axes[0].plot(bins, sm_prof, color="k", linewidth=lw * 0.8, label="Smoothed Profile")
     yrange = axes[0].get_ylim()
 
+    xpos = (xrange[1] - xrange[0]) * 0.95 + xrange[0]
+    ypos = (yrange[-1] - yrange[0]) * 0.8 + yrange[0]
+    axes[0].errorbar(xpos, ypos, yerr=noise_est, color="k", marker="none", capsize=3, elinewidth=lw)
+
     # Onpulse estimates
-    underest_args = dict(color="tab:blue", edgecolor=None, alpha=0.3, zorder=0)
+    underest_args = dict(color="tab:blue", alpha=0.2, hatch="///", zorder=0.1)
     overest_args = dict(color="tab:blue", edgecolor=None, alpha=0.2, zorder=0)
     for pairlist, args, flag, label in zip(
         [underest_onpulse, overest_onpulse],
@@ -600,9 +815,10 @@ def _find_onpulse_regions_from_ppoly(
     noise_est: float,
     sigma_cutoff: float = 2.0,
     logger: logging.Logger | None = None,
-) -> dict:
+) -> tuple[list, list, dict]:
     """Find under- and over-estimates of the onpulse regions from a PPoly representation
-    of a smoothed profile.
+    of a smoothed profile. If true maxima cannot be found (i.e. no maxima exceed the cutoff),
+    then `None` will be returned for each of the outputs.
 
     Parameters
     ----------
@@ -620,15 +836,13 @@ def _find_onpulse_regions_from_ppoly(
 
     Returns
     -------
-    results: `dict`
-        A dictionary containing the following:
-
-        "bins" : The bins at which the profile was evaluated at.
-        "sm_prof" : The evaluated smoothed profile.
-        "d1_sm_prof" : The first derivative of sm_prof.
-        "d2_sm_prof" : The second derivative of sm_prof.
-        "underest_onpulse" : A list of pairs of underestimated onpulse bin indices.
-        "overest_onpulse" : A list of pairs of overestimated onpulse bin indices.
+    underest_onpulse : `list` | `None`
+        A list of pairs of underestimated onpulse bin indices.
+    overest_onpulse : `list` | `None`
+        A list of pairs of overestimated onpulse bin indices.
+    results: `dict` | `None`
+        A dictionary containing arrays of bin indices, the smoothed profile and
+        its first and second derivatives, and the on/off-pulse pairs.
     """
     if logger is None:
         logger = psrutils.get_logger()
@@ -638,6 +852,10 @@ def _find_onpulse_regions_from_ppoly(
     d1_roots = [round(rt) for rt in d1_ppoly.roots()]
     d2_ppoly = ppoly.derivative(nu=2)
     d2_roots = [round(rt) for rt in d2_ppoly.roots()]
+
+    # Remove duplicates due to rounding
+    d1_roots = list(set(d1_roots))
+    d2_roots = list(set(d2_roots))
 
     # Interpolate smoothed profiles
     sm_prof = ppoly(bins)
@@ -658,7 +876,8 @@ def _find_onpulse_regions_from_ppoly(
 
     # Catagorise minima and maxima
     minima = []
-    true_maxima, false_maxima = [], []
+    true_maxima = []
+    false_maxima = []
     for root in d1_roots_inbounds:
         if d2_sm_prof[root] > 0:  # Minimum
             minima.append(root)
@@ -670,7 +889,7 @@ def _find_onpulse_regions_from_ppoly(
 
     if not true_maxima:
         logger.warning(f"No profile maxima found >{sigma_cutoff} sigma.")
-        return
+        return None, None, None
 
     underest_onpulse = []
     overest_onpulse = []
@@ -681,13 +900,13 @@ def _find_onpulse_regions_from_ppoly(
         mloc = d2_roots.index(d1_root)
         d2_roots.remove(d1_root)
         try:
-            underestimate = [round(d2_roots[mloc - 1]), round(d2_roots[mloc])]
+            underestimate = [d2_roots[mloc - 1], d2_roots[mloc]]
         except IndexError:
             # The next inflection is on the other side of the profile
             if mloc == 0:  # Left side
-                underestimate = [round(d2_roots[-1]), round(d2_roots[mloc])]
+                underestimate = [d2_roots[-1], d2_roots[mloc]]
             else:  # Right side
-                underestimate = [round(d2_roots[mloc - 1]), round(d2_roots[0])]
+                underestimate = [d2_roots[mloc - 1], d2_roots[0]]
         underest_onpulse.append(underestimate)
 
         # Overestimated onpulse
@@ -696,35 +915,27 @@ def _find_onpulse_regions_from_ppoly(
         mloc = minima.index(d1_root)
         minima.remove(d1_root)
         try:
-            overestimate = [round(minima[mloc - 1]), round(minima[mloc])]
+            overestimate = [minima[mloc - 1], minima[mloc]]
         except IndexError:
             # The next inflection is on the other side of the profile
             if mloc == 0:  # Left side
-                overestimate = [round(minima[-1]), round(minima[mloc])]
+                overestimate = [minima[-1], minima[mloc]]
             else:  # Right side
-                overestimate = [round(minima[mloc - 1]), round(minima[0])]
+                overestimate = [minima[mloc - 1], minima[0]]
+        overest_onpulse.append(overestimate)
 
-        # If the bounds are touching
-        if overest_onpulse and overestimate[0] == overest_onpulse[-1][1]:
-            overest_onpulse[-1][1] = overestimate[1]
+    # Make sure the regions are non-overlapping and non-contiguous
+    underest_onpulse = _merge_and_sort_pairs(underest_onpulse, bins.size, logger=logger)
+    overest_onpulse = _merge_and_sort_pairs(overest_onpulse, bins.size, logger=logger)
 
-        # If the last element wraps around to the first
-        elif overest_onpulse and overestimate[1] == overest_onpulse[0][0]:
-            overest_onpulse[0][0] = overestimate[0]
-        else:
-            overest_onpulse.append(overestimate)
+    # Fill the onpulse regions if there is signal between them
+    if underest_onpulse is not None:
+        underest_onpulse = _fill_onpulse_regions(underest_onpulse, sm_prof, noise_est, sigma_cutoff)
+    if overest_onpulse is not None:
+        overest_onpulse = _fill_onpulse_regions(overest_onpulse, sm_prof, noise_est, sigma_cutoff)
 
-    # Remove any duplicate items because somehow this happens sometimes
-    underest_onpulse.sort()
-    underest_onpulse = list(k for k, _ in itertools.groupby(underest_onpulse))
-    overest_onpulse.sort()
-    overest_onpulse = list(k for k, _ in itertools.groupby(overest_onpulse))
-
-    # Fill the on-pulse regions
-    underest_onpulse = _fill_onpulse_regions(underest_onpulse, sm_prof, noise_est, sigma_cutoff)
-    overest_onpulse = _fill_onpulse_regions(overest_onpulse, sm_prof, noise_est, sigma_cutoff)
-
-    return dict(
+    # Store all the information required to make a plot
+    plot_dict = dict(
         bins=bins,
         sm_prof=sm_prof,
         d1_sm_prof=d1_sm_prof,
@@ -732,3 +943,95 @@ def _find_onpulse_regions_from_ppoly(
         underest_onpulse=underest_onpulse,
         overest_onpulse=overest_onpulse,
     )
+
+    return underest_onpulse, overest_onpulse, plot_dict
+
+
+def _merge_and_sort_pairs(pairs: list, nbin: int, logger: logging.Logger | None = None) -> list:
+    """From a list of bin index pairs, generate a new list of bin index pairs with no overlap and
+    no continguous regions.
+
+    Parameters
+    ----------
+    pairs : `list`
+        A list of bin index pairs.
+    nbin : `int`
+        The total number of bins in the profile.
+    logger : `logging.Logger`, optional
+        A logger to use. Default: `None`.
+
+    Returns
+    -------
+    new_pairs : `list`
+        A list of merged and sorted bin index pairs.
+    """
+    if logger is None:
+        logger = psrutils.get_logger()
+
+    bins = np.arange(nbin)
+    mask = np.full(nbin, False)
+
+    for pair in pairs:
+        if pair[0] == pair[1]:
+            continue
+        elif pair[0] < pair[1]:
+            submask = np.logical_and(bins >= pair[0], bins <= pair[1])
+        else:
+            submask = np.logical_or(bins >= pair[-1], bins <= pair[0])
+        mask = np.logical_or(mask, submask)
+
+    if np.logical_and.reduce(np.logical_not(mask)):
+        logger.debug("Merge found no bins contained in a valid region")
+        return None
+
+    if np.logical_and.reduce(mask):
+        logger.debug("Merge found all bins contained in a valid region")
+        return None
+
+    new_pairs = []
+    left = 0
+    consec = 0
+    for ibin in bins:
+        if not mask[ibin]:
+            if consec > 0:
+                new_pairs.append([left, ibin - 1])
+                consec = 0
+            continue
+        if consec == 0:
+            left = ibin
+        consec += 1
+
+    if new_pairs[-1][1] == new_pairs[0][0]:
+        new_pairs = new_pairs[1:-2].append([new_pairs[-1][0], new_pairs[0][1]])
+
+    return new_pairs
+
+
+def _get_offpulse_from_onpulse(onpulse_pairs: list) -> list:
+    """Given a list of pairs of bin indices defining the onpulse regions, find the
+    corresponding list of pairs of bin indices defining the offpulse regions.
+
+    Parameters
+    ----------
+    onpulse_pairs : `list`
+        A list of pairs of bin indices defining the onpulse.
+
+    Returns
+    -------
+    offpulse_pairs : `list`
+        A list of pairs of bin indices defining the offpulse.
+    """
+    offpulse_pairs = []
+
+    # Make cycling generators to deal with wrap-around
+    current_pair_gen = itertools.cycle(onpulse_pairs)
+    next_pair_gen = itertools.cycle(onpulse_pairs)
+    next(next_pair_gen)
+
+    # Figure out the off-pulse profile
+    for _ in range(len(onpulse_pairs)):
+        current_pair = next(current_pair_gen)
+        next_pair = next(next_pair_gen)
+        offpulse_pairs.append([current_pair[1], next_pair[0]])
+
+    return offpulse_pairs

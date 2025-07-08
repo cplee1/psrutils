@@ -155,12 +155,12 @@ def _measure_rm_unc_analytic(fdf_peak_amp: float, rmsf_fwhm: float, noise: np.nd
 def rm_synthesis(
     cube: psrutils.StokesCube,
     phi: np.ndarray,
-    onpulse_win: np.ndarray | None = None,
     norm: str | None = None,
     meas_rm_prof: bool = False,
     meas_rm_scat: bool = False,
     bootstrap_nsamp: int | None = None,
-    offpulse_win: np.ndarray | None = None,
+    onpulse_bins: np.ndarray | None = None,
+    offpulse_bins: np.ndarray | None = None,
     logger: logging.Logger | None = None,
 ) -> None:
     """Perform RM-synthesis for each phase bin.
@@ -171,8 +171,6 @@ def rm_synthesis(
         A StokesCube object.
     phi : `np.ndarray`
         An array of Faraday depths (in rad/m^2) to compute.
-    onpulse_win : `np.ndarray`
-        A list of bins corresponding to the on-pulse region.
     norm : `str`, optional
         Spectral model subtraction method.
             'mod' - fit a linear model to Stokes I
@@ -184,7 +182,9 @@ def rm_synthesis(
         Measure RM_scat. Default: `False`.
     boostrap_nsamp : `int`, optional
         Number of bootstrap iterations. Default: `None`.
-    offpulse_win : `np.ndarray`, optional
+    onpulse_bins : `np.ndarray`
+        A list of bins corresponding to the onpulse region. Default: `None`.
+    offpulse_bins : `np.ndarray`, optional
         The bin indices of the offpulse window. Default: `None`.
     logger : `logging.Logger`, optional
         A logger to use. Default: `None`.
@@ -229,17 +229,19 @@ def rm_synthesis(
     # Extract the spectral data from the archive
     data = cube.subbands  # -> (pol,freq,phase)
 
+    # Generate a mask for the offpulse
+    if offpulse_bins is None:
+        offpulse_mask = np.full(data.shape[2], True)
+    else:
+        offpulse_mask = np.full(data.shape[2], False)
+        for bin_idx in offpulse_bins:
+            offpulse_mask[bin_idx] = True
+
     # Initialise arrays
     tmp_fdf = np.empty(len(phi), dtype=np.complex128)
     tmp_prof_fdf = np.zeros(len(phi), dtype=np.float64)
     if type(bootstrap_nsamp) is int:
-        if offpulse_win is None:
-            mask = np.full(data.shape[2], True)
-        else:
-            mask = np.full(data.shape[2], False)
-            for bin_idx in offpulse_win:
-                mask[bin_idx] = True
-        masked_data = data[:, :, mask]
+        masked_data = data[:, :, offpulse_mask]
 
         # Compute the median standard deviation in the bin spectra
         q_std = np.median(masked_data[1].std(0))
@@ -281,7 +283,7 @@ def rm_synthesis(
             # Bootstrap RM_prof
             for iter in trange(bootstrap_nsamp):
                 tmp_prof_fdf = np.zeros(len(phi), dtype=np.float64)
-                for bin in onpulse_win:
+                for bin in onpulse_bins:
                     S = data[:, :, bin]  # -> dim=(pol,freq)
                     W = np.where(S[0] == 0.0, 0.0, 1.0)  # Uniform weights
                     K = 1.0 / np.sum(W)
@@ -292,7 +294,7 @@ def rm_synthesis(
                     )
                     tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                     tmp_prof_fdf += np.abs(tmp_fdf)
-                tmp_prof_fdf /= len(onpulse_win)
+                tmp_prof_fdf /= len(onpulse_bins)
                 rm_prof_samples[iter], _ = _measure_rm(phi, tmp_prof_fdf)
         else:
             rm_prof_samples, _ = _measure_rm(phi, np.abs(fdf).mean(0))
