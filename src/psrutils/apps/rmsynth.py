@@ -25,14 +25,15 @@ import psrutils
     "--w_off",
     "offpulse_ws",
     type=int,
-    help="The window size used to find the offpulse noise using the flux minimisation method.",
+    help="The window size used to find the offpulse noise using the flux minimisation method. "
+    + "By default, will automatically determine the offpulse using the spline method.",
 )
 @click.option(
     "--w_on",
     "onpulse_ws",
     type=int,
     help="The window size used to find the onpulse using the flux maximisation method. "
-    + "By default, will automatically determine the onpulse using the differentiation method.",
+    + "By default, will automatically determine the onpulse using the spline method.",
 )
 @click.option("--rmlim", type=float, default=100.0, help="RM limit.")
 @click.option("--rmres", type=float, default=0.01, help="RM resolution.")
@@ -96,41 +97,49 @@ def main(
         max_idx = np.argmax(cube.profile)
         cube.rotate_phase((max_idx - cube.num_bin // 2) / cube.num_bin)
 
-    # Default to minimum/maximum flux method
-    onpulse_pairs = None
-    offpulse_pairs = None
-    sm_prof = None
-
-    if onpulse_ws is None:
+    if onpulse_ws is None or offpulse_ws is None:
         # Estimate both the onpulse by smoothing the profile and locating the minima flanking the
         # real maxima. The offpulse is then all non-onpulse bins.
-        onpulse_pairs, offpulse_pairs, noise_est, sm_prof = psrutils.find_onpulse_regions_bootstrap(
+        _, onpulse_pairs, offpulse_pairs, noise_est, plot_dict = psrutils.find_onpulse_regions(
             cube.profile,
             sigma_cutoff=2.0,
             logger=logger,
         )
+        if plot_dict is not None:
+            sm_prof = plot_dict["sm_prof"]
+    else:
+        sm_prof = None
 
-    if onpulse_pairs is None:
-        # Get the onpulse
+    if onpulse_ws is not None:
+        # Estimate the onpulse using the flux maximisation method
         onpulse_pair = psrutils.find_optimal_pulse_window(
             cube.profile, windowsize=onpulse_ws, maximise=True, logger=logger
         )
         onpulse_pairs = [onpulse_pair]
 
-    if offpulse_pairs is None:
-        # Get the offpulse - if offpulse_ws is None, then assume a window size of 1/8 of profile
+    if offpulse_ws is not None:
+        # Estimate the offpulse using the flux minimisation method
         offpulse_pair = psrutils.find_optimal_pulse_window(
             cube.profile, windowsize=offpulse_ws, maximise=False, logger=logger
         )
         offpulse_pairs = [offpulse_pair]
-        noise_est = np.nanstd(psrutils.mask_profile_region_from_pairs(cube.profile, offpulse_pairs))
+
+        _, offpulse = psrutils.get_profile_mask_from_pairs(cube.profile, offpulse_pairs)
+        noise_est = np.nanstd(offpulse)
 
     # Use the bin pairs to get all bins in the onpulse and offpulse regions
-    onpulse_mask = psrutils.get_profile_mask_from_pairs(cube.num_bin, onpulse_pairs)
-    offpulse_mask = psrutils.get_profile_mask_from_pairs(cube.num_bin, offpulse_pairs)
     bins = np.arange(cube.num_bin)
-    onpulse_bins = bins[onpulse_mask]
-    offpulse_bins = bins[offpulse_mask]
+    if onpulse_pairs is not None:
+        onpulse_mask, _ = psrutils.get_profile_mask_from_pairs(cube.profile, onpulse_pairs)
+        onpulse_bins = bins[onpulse_mask]
+    else:
+        onpulse_bins = None
+
+    if offpulse_pairs is not None:
+        offpulse_mask, _ = psrutils.get_profile_mask_from_pairs(cube.profile, offpulse_pairs)
+        offpulse_bins = bins[offpulse_mask]
+    else:
+        offpulse_bins = None
 
     psrutils.plot_profile(
         cube,

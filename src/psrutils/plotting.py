@@ -680,7 +680,7 @@ def plot_2d_fdf(
     if onpulse_pairs is None:
         fdf_amp_1Dy = fdf_amp_2D.mean(0)
     else:
-        onpulse_mask = psrutils.get_profile_mask_from_pairs(cube.num_bin, onpulse_pairs)
+        onpulse_mask, _ = psrutils.get_profile_mask_from_pairs(cube.profile, onpulse_pairs)
         fdf_amp_1Dy = fdf_amp_2D[onpulse_mask].mean(0)
 
     # Styles

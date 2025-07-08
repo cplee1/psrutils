@@ -231,11 +231,16 @@ def rm_synthesis(
 
     # Generate a mask for the offpulse
     if offpulse_bins is None:
-        offpulse_mask = np.full(data.shape[2], True)
+        # Use the whole profile
+        offpulse_mask = np.full(cube.num_bin, True)
     else:
-        offpulse_mask = np.full(data.shape[2], False)
+        offpulse_mask = np.full(cube.num_bin, False)
         for bin_idx in offpulse_bins:
             offpulse_mask[bin_idx] = True
+
+    if onpulse_bins is None:
+        # Use the whole profile
+        onpulse_bins = np.arange(cube.num_bin)
 
     # Initialise arrays
     tmp_fdf = np.empty(len(phi), dtype=np.complex128)

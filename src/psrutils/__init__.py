@@ -7,6 +7,7 @@ from .core import *
 from .jit_kernels import *
 from .logger import *
 from .plotting import *
+from .polarisation import *
 from .profile import *
 from .rm import *
 
