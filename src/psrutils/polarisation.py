@@ -21,7 +21,6 @@ __all__ = [
 
 def get_bias_corrected_pol_profile(
     cube: psrutils.StokesCube,
-    windowsize: int | None = None,
     logger: logging.Logger | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Get the full polarisation profile and correct for bias in the linear
@@ -33,8 +32,6 @@ def get_bias_corrected_pol_profile(
     ----------
     cube : `psrutils.StokesCube`
         A StokesCube object.
-    windowsize : `int`, optional
-        Window width (in bins) defining the trial regions to integrate. Default: `None`
     logger : `logging.Logger`, optional
         A logger to use. Default: `None`.
 
@@ -63,17 +60,9 @@ def get_bias_corrected_pol_profile(
         return iquv_profile, None, None, None, None, None
 
     # Get the indices of the offpulse bins
-    offpulse_win = psrutils.find_optimal_pulse_window(
-        iquv_profile[0], windowsize=windowsize, maximise=False, logger=logger
-    )
-
-    # Create a profile mask to get the offpulse
-    offpulse_mask = np.full(iquv_profile.shape[1], False)
-    for bin_idx in offpulse_win:
-        offpulse_mask[bin_idx] = True
-
-    # Offpulse Stokes I noise
-    sigma_i = np.std(iquv_profile[0, offpulse_mask])
+    profile = psrutils.Profile(cube.profile)
+    profile.bootstrap_onpulse_regions()
+    sigma_i = profile.noise_est
 
     # Measured Stokes L
     l_meas = np.sqrt(iquv_profile[1] ** 2 + iquv_profile[2] ** 2)

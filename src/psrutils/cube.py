@@ -1,6 +1,5 @@
 import psrchive
-
-from psrutils import C0
+from scipy.constants import speed_of_light
 
 __all__ = ["StokesCube"]
 
@@ -102,7 +101,7 @@ class StokesCube(object):
     def lambda_sq(self):
         """The squared centre wavelengths of all subbands in m^2."""
         freqs = self._archive.get_frequencies() * 1e6
-        return (C0 / freqs) ** 2
+        return (speed_of_light / freqs) ** 2
 
     @property
     def int_time(self):

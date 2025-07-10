@@ -13,6 +13,7 @@ from matplotlib.axes import Axes
 import psrutils
 
 __all__ = [
+    "centre_offset_degrees",
     "add_profile_to_axes",
     "plot_profile",
     "plot_pol_profile",
@@ -22,6 +23,10 @@ __all__ = [
     "plot_rm_hist",
     "plot_rm_vs_phi",
 ]
+
+
+def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
+    return phase_bins * 360 - 180
 
 
 def add_profile_to_axes(
@@ -666,7 +671,6 @@ def plot_2d_fdf(
     if rm_prof_qty is not None:
         cube.defaraday(rm_prof_qty[0])
 
-    # Will by default use 1/8 of the profile to find offpulse noise
     iquv_prof, l_prof, pa_prof, p0_l, _, _ = psrutils.get_bias_corrected_pol_profile(
         cube, logger=logger
     )
@@ -680,7 +684,7 @@ def plot_2d_fdf(
     if onpulse_pairs is None:
         fdf_amp_1Dy = fdf_amp_2D.mean(0)
     else:
-        onpulse_mask, _ = psrutils.get_profile_mask_from_pairs(cube.profile, onpulse_pairs)
+        onpulse_mask = psrutils.get_profile_mask_from_pairs(cube.num_bin, onpulse_pairs)
         fdf_amp_1Dy = fdf_amp_2D[onpulse_mask].mean(0)
 
     # Styles

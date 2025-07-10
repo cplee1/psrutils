@@ -19,13 +19,13 @@ def get_log_levels() -> dict:
     )
 
 
-def get_logger(name: str = __name__, log_level: int | None = logging.INFO) -> logging.Logger:
+def get_logger(name: str | None = None, log_level: int | None = logging.INFO) -> logging.Logger:
     """Initialise the custom logger.
 
     Parameters
     ----------
     name : `str`, optional
-        The name of the logger. Default: `__name__`.
+        The name of the logger. Default: `None`.
     log_level : `int`, optional
         The logging level. Default: `logging.INFO`.
 

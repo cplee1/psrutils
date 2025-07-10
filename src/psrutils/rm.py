@@ -7,7 +7,6 @@ from scipy.optimize import curve_fit
 from tqdm import trange
 
 import psrutils
-from psrutils import IMAG
 
 __all__ = ["rm_synthesis", "rm_clean"]
 
@@ -267,7 +266,7 @@ def rm_synthesis(
         K = 1.0 / np.sum(W)
 
         # Perform RM synthesis on the real observed data (for plotting)
-        P, model = _normalise_spectrum(S[1] + IMAG * S[2], S[0], cube.freqs, norm, logger)
+        P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm, logger)
         rmsf[bin] = psrutils.dft_kernel(W, rmsf[bin], rmsf_phi, l2, l2_0, K)
         fdf[bin] = psrutils.dft_kernel(P * W, fdf[bin], phi, l2, l2_0, K)
 
@@ -276,7 +275,7 @@ def rm_synthesis(
             for iter in range(bootstrap_nsamp):
                 Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                 U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                P = (Q_rvs + IMAG * U_rvs) / model
+                P = (Q_rvs + 1j * U_rvs) / model
                 tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                 rm_phi_samples[bin, iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
         else:
@@ -295,7 +294,7 @@ def rm_synthesis(
                     Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                     U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
                     P, model = _normalise_spectrum(
-                        Q_rvs + IMAG * U_rvs, S[0], cube.freqs, norm, logger
+                        Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm, logger
                     )
                     tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                     tmp_prof_fdf += np.abs(tmp_fdf)
@@ -316,11 +315,11 @@ def rm_synthesis(
             for iter in trange(bootstrap_nsamp):
                 Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                 U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                P, model = _normalise_spectrum(Q_rvs + IMAG * U_rvs, S[0], cube.freqs, norm, logger)
+                P, model = _normalise_spectrum(Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm, logger)
                 tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                 rm_scat_samples[iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
         else:
-            P, model = _normalise_spectrum(S[1] + IMAG * S[2], S[0], cube.freqs, norm, logger)
+            P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm, logger)
             tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
             rm_scat_samples, _ = _measure_rm(phi, np.abs(tmp_fdf))
     else:

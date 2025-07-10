@@ -21,20 +21,6 @@ import psrutils
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
 @click.option("-c", "centre", is_flag=True, help="Centre the pulse.")
-@click.option(
-    "--w_off",
-    "offpulse_ws",
-    type=int,
-    help="The window size used to find the offpulse noise using the flux minimisation method. "
-    + "By default, will automatically determine the offpulse using the spline method.",
-)
-@click.option(
-    "--w_on",
-    "onpulse_ws",
-    type=int,
-    help="The window size used to find the onpulse using the flux maximisation method. "
-    + "By default, will automatically determine the onpulse using the spline method.",
-)
 @click.option("--rmlim", type=float, default=100.0, help="RM limit.")
 @click.option("--rmres", type=float, default=0.01, help="RM resolution.")
 @click.option("-n", "nsamp", type=int, help="The number of bootstrap samples.")
@@ -63,8 +49,6 @@ def main(
     bscr: int,
     rotate: float,
     centre: bool,
-    offpulse_ws: int,
-    onpulse_ws: int,
     rmlim: float,
     rmres: float,
     nsamp: int,
@@ -86,7 +70,7 @@ def main(
     dark_mode: bool,
 ) -> None:
     log_level_dict = psrutils.get_log_levels()
-    logger = psrutils.get_logger(log_level=log_level_dict[log_level])
+    logger = psrutils.get_logger(__name__, log_level=log_level_dict[log_level])
 
     logger.info(f"Loading archive: {archive}")
     cube = psrutils.StokesCube.from_psrchive(archive, False, 1, fscr, bscr, rotate)
@@ -97,56 +81,16 @@ def main(
         max_idx = np.argmax(cube.profile)
         cube.rotate_phase((max_idx - cube.num_bin // 2) / cube.num_bin)
 
-    if onpulse_ws is None or offpulse_ws is None:
-        # Estimate both the onpulse by smoothing the profile and locating the minima flanking the
-        # real maxima. The offpulse is then all non-onpulse bins.
-        _, onpulse_pairs, offpulse_pairs, noise_est, plot_dict = psrutils.find_onpulse_regions(
-            cube.profile,
-            sigma_cutoff=2.0,
-            logger=logger,
-        )
-        if plot_dict is not None:
-            sm_prof = plot_dict["sm_prof"]
-    else:
-        sm_prof = None
-
-    if onpulse_ws is not None:
-        # Estimate the onpulse using the flux maximisation method
-        onpulse_pair = psrutils.find_optimal_pulse_window(
-            cube.profile, windowsize=onpulse_ws, maximise=True, logger=logger
-        )
-        onpulse_pairs = [onpulse_pair]
-
-    if offpulse_ws is not None:
-        # Estimate the offpulse using the flux minimisation method
-        offpulse_pair = psrutils.find_optimal_pulse_window(
-            cube.profile, windowsize=offpulse_ws, maximise=False, logger=logger
-        )
-        offpulse_pairs = [offpulse_pair]
-
-        _, offpulse = psrutils.get_profile_mask_from_pairs(cube.profile, offpulse_pairs)
-        noise_est = np.nanstd(offpulse)
-
-    # Use the bin pairs to get all bins in the onpulse and offpulse regions
-    bins = np.arange(cube.num_bin)
-    if onpulse_pairs is not None:
-        onpulse_mask, _ = psrutils.get_profile_mask_from_pairs(cube.profile, onpulse_pairs)
-        onpulse_bins = bins[onpulse_mask]
-    else:
-        onpulse_bins = None
-
-    if offpulse_pairs is not None:
-        offpulse_mask, _ = psrutils.get_profile_mask_from_pairs(cube.profile, offpulse_pairs)
-        offpulse_bins = bins[offpulse_mask]
-    else:
-        offpulse_bins = None
+    profile = psrutils.Profile(cube.profile)
+    profile.bootstrap_onpulse_regions()
+    profile.plot_onpulse_regions()
 
     psrutils.plot_profile(
         cube,
-        offpulse_pairs=offpulse_pairs,
-        onpulse_pairs=onpulse_pairs,
-        noise_est=noise_est,
-        sm_prof=sm_prof,
+        offpulse_pairs=profile.offpulse_pairs,
+        onpulse_pairs=profile.overest_onpulse_pairs,
+        noise_est=profile.noise_est,
+        sm_prof=profile.ppoly(profile.bins),
         savename=f"{cube.source}_profile",
         save_pdf=save_pdf,
         logger=logger,
@@ -160,8 +104,8 @@ def main(
         meas_rm_prof=meas_rm_prof,
         meas_rm_scat=meas_rm_scat,
         bootstrap_nsamp=nsamp,
-        onpulse_bins=onpulse_bins,
-        offpulse_bins=offpulse_bins,
+        onpulse_bins=profile.overest_onpulse_bins,
+        offpulse_bins=profile.offpulse_bins,
         logger=logger,
     )
     fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
@@ -267,7 +211,9 @@ def main(
 
     meas_delta_vi = True
     if meas_delta_vi:
-        delta_vi = psrutils.get_delta_vi(cube, onpulse_bins=onpulse_bins, logger=logger)
+        delta_vi = psrutils.get_delta_vi(
+            cube, onpulse_bins=profile.overest_onpulse_bins, logger=logger
+        )
 
     logger.info("Plotting")
     psrutils.plotting.plot_2d_fdf(
@@ -277,7 +223,7 @@ def main(
         rmsf_fwhm=rm_stats["rmsf_fwhm"],
         rm_phi_qty=rm_phi_qty,
         rm_prof_qty=rm_prof_qty,
-        onpulse_pairs=onpulse_pairs,
+        onpulse_pairs=profile.overest_onpulse_pairs,
         rm_mask=peak_mask,
         cln_comps=cln_comps,
         plot_peaks=peaks,
