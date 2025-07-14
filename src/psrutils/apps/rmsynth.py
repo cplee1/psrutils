@@ -81,9 +81,15 @@ def main(
         max_idx = np.argmax(cube.profile)
         cube.rotate_phase((max_idx - cube.num_bin // 2) / cube.num_bin)
 
-    profile = psrutils.Profile(cube.profile)
-    profile.bootstrap_onpulse_regions()
-    profile.plot_onpulse_regions()
+    profile = psrutils.Profile(cube.profile / np.max(cube.profile))
+    rv = profile.bootstrap_onpulse_regions()
+    if rv != 0:
+        logger.critical(f"Onpulse bootstrapping failed with code {rv}")
+        exit(rv)
+
+    profile.plot_diagnostics(
+        savename=f"{cube.source}_profile_diagnostics", plot_underestimate=False
+    )
 
     psrutils.plot_profile(
         cube,
