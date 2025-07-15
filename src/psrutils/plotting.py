@@ -126,10 +126,6 @@ def add_profile_to_axes(
 def plot_profile(
     cube: psrutils.StokesCube,
     pol: int = 0,
-    offpulse_pairs: list | None = None,
-    onpulse_pairs: list | None = None,
-    noise_est: float | None = None,
-    sm_prof: np.ndarray | None = None,
     savename: str = "profile",
     save_pdf: bool = False,
     logger: logging.Logger | None = None,
@@ -142,14 +138,6 @@ def plot_profile(
         A StokesCube object.
     pol : `int`, optional
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
-    offpulse_pairs : `list`, optional
-        A list of pairs of bin indices defining the offpulse region(s). Default: `None`.
-    onpulse_pairs : `list`, optional
-        A list of pairs of bin indices defining the onpulse region(s). Default: `None`.
-    noise_est : `float`, optional
-        The standard deviation of the offpulse noise.
-    sm_prof : `np.ndarray`, optional
-        The smoothed pulse profile.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'profile'.
     save_pdf : `bool`, optional
@@ -165,66 +153,12 @@ def plot_profile(
 
     fig, ax = plt.subplots(dpi=300, tight_layout=True)
 
-    bins = np.arange(cube.num_bin) / cube.num_bin
-    xlims = [bins[0], bins[-1]]
+    bins = np.arange(cube.num_bin) / (cube.num_bin - 1)
 
-    if sm_prof is None:
-        ax.plot(bins, cube.profile, color="k", linewidth=0.9, label="Profile")
-    else:
-        ax.plot(bins, cube.profile, color="k", alpha=0.3, linewidth=1, label="Profile")
-        ax.plot(bins, sm_prof, color="k", linewidth=0.9, label="Spline")
+    ax.plot(bins, cube.profile, color="k", linewidth=1, label="Profile")
+    ax.axhline(0, linestyle=":", linewidth=1.2, color="k", alpha=0.3)
 
-    ylims = ax.get_ylim()
-
-    fill_args = dict(alpha=0.4, edgecolor="none", zorder=0)
-    if noise_est is not None:
-        ylims_op = [-abs(noise_est) / 2, abs(noise_est) / 2]
-    else:
-        yrange = ylims[-1] - ylims[0]
-        ylims_op = [-yrange / 20, yrange / 20]
-
-    if offpulse_pairs is not None:
-        for ii, pair in enumerate(offpulse_pairs):
-            pair = [pair[0] / cube.num_bin, pair[1] / cube.num_bin]
-            if ii == 0:
-                label = "Offpulse"
-            else:
-                label = None
-            if pair[0] < pair[-1]:
-                ax.fill_betweenx(
-                    ylims_op, pair[0], pair[-1], color="tab:red", label=label, **fill_args
-                )
-            else:
-                ax.fill_betweenx(
-                    ylims_op, pair[0], xlims[-1], color="tab:red", label=label, **fill_args
-                )
-                ax.fill_betweenx(ylims_op, xlims[0], pair[-1], color="tab:red", **fill_args)
-
-    if onpulse_pairs is not None:
-        for ii, pair in enumerate(onpulse_pairs):
-            pair = [pair[0] / cube.num_bin, pair[1] / cube.num_bin]
-            if ii == 0:
-                label = "Onpulse"
-            else:
-                label = None
-            if pair[0] < pair[-1]:
-                ax.fill_betweenx(
-                    ylims_op, pair[0], pair[-1], color="tab:blue", label=label, **fill_args
-                )
-            else:
-                ax.fill_betweenx(
-                    ylims_op, pair[0], xlims[-1], color="tab:blue", label=label, **fill_args
-                )
-                ax.fill_betweenx(ylims_op, xlims[0], pair[-1], color="tab:blue", **fill_args)
-
-    if onpulse_pairs is not None or offpulse_pairs is not None:
-        ax.legend(loc="upper right")
-
-    # Plot the noise floor
-    ax.axhline(0, linestyle="--", linewidth=0.8, color="k")
-
-    ax.set_xlim(xlims)
-    ax.set_ylim(ylims)
+    ax.set_xlim([bins[0], bins[-1]])
     ax.set_xlabel("Pulse Phase")
     ax.set_ylabel("Flux Density [arb. units]")
 

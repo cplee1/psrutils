@@ -224,6 +224,11 @@ class Profile(object):
         sigma_cutoff : `float`, optional
             The number of standard deviations above which a peak will be considered real.
             Default: 2.0.
+
+        Returns
+        -------
+        rv : `int`
+            A return value: 0 for success; non-zero otherwise.
         """
         if noise_est is None:
             if not self._noise_est:
@@ -338,6 +343,7 @@ class Profile(object):
                 (self._bins[0], self._bins[0] + self._nbin),
             )
 
+        self._maxima = true_maxima
         self._underest_onpulse_pairs = underest_onpulse_pairs
         self._overest_onpulse_pairs = overest_onpulse_pairs
 
@@ -380,6 +386,11 @@ class Profile(object):
         sigma_cutoff : `float`, optional
             The number of standard deviations above which a peak will be considered real.
             Default 2.0.
+
+        Returns
+        -------
+        rv : `int`
+            A return value: 0 for success; non-zero otherwise.
         """
         logger.debug("Bootstrapping to estimate onpulse...")
 
@@ -442,10 +453,95 @@ class Profile(object):
 
         return 0
 
+    def measure_pulse_widths(self, peak_fracs: list | None = None, sigma_cutoff: int = 2.0) -> None:
+        """Measure the pulse width(s) at a given fraction of the peak flux density.
+
+        Parameters
+        ----------
+        peak_fracs : `list`, optional
+            The peak fraction to find the width(s) at (i.e. 0.1 for W10). Default: [0.5, 0.1].
+        sigma_cutoff : `int`, optional
+            The number of standard deviations above which a peak will be considered real.
+            Default 2.0.
+        """
+        assert self._ppoly is not None
+        assert self._d1_ppoly is not None
+        assert self._maxima is not None
+        assert self._noise_est is not None
+
+        if peak_fracs is None:
+            peak_fracs = [0.5, 0.1]
+
+        peak_flux = np.max(self._ppoly(np.array(self._maxima)))
+        peak_snr = peak_flux / self._noise_est
+
+        widths_dict = {}
+        for peak_frac in peak_fracs:
+            if peak_snr < 1 / peak_frac:
+                logger.debug(f"Skipping W{peak_frac * 100:.0f} - not enough S/N")
+                continue
+
+            roots = self._ppoly.solve(peak_frac * peak_flux, extrapolate="periodic")
+
+            # Filter out extrapolated roots
+            roots_inbounds = []
+            for root in roots:
+                # Note that we are evaluating the roots continously, so the interval is (0, Nbin)
+                if root < self._bins[0] or root > self._bins[0] + self._nbin:
+                    continue
+                roots_inbounds.append(root)
+            roots = roots_inbounds
+
+            # There must be an even number of roots
+            assert len(roots) % 2 == 0
+
+            root_pairs = []
+            current_pair = []
+            for ii in range(len(roots)):
+                if ii == 0 and self._d1_ppoly(roots[ii]) < 0.0:
+                    # The first root is a trailing edge
+                    continue
+                else:
+                    current_pair.append(roots[ii])
+
+                if ii + 1 == len(roots) and len(current_pair) == 1:
+                    # If the first root was a trailing edge
+                    current_pair.append(roots[0])
+
+                if len(current_pair) == 2:
+                    root_pairs.append(tuple(current_pair))
+                    current_pair = []
+
+            # Sanity check
+            assert len(root_pairs) == len(roots) / 2
+
+            root_pairs = _fill_onpulse_regions(
+                root_pairs,
+                self._bspl,
+                self._noise_est,
+                sigma_cutoff,
+                (self._bins[0], self._bins[0] + self._nbin),
+            )
+
+            widths = []
+            for root_pair in root_pairs:
+                if root_pair[0] < root_pair[1]:
+                    width = root_pair[1] - root_pair[0]
+                else:
+                    width = (root_pair[1] - self._bins[0]) + (
+                        self._bins[0] + self._nbin - root_pair[0]
+                    )
+                widths.append((root_pair, width))
+
+            widths_dict[f"W{peak_frac * 100:.0f}"] = (peak_frac, peak_frac * peak_flux, widths)
+
+        self._widths = widths_dict
+
     def plot_diagnostics(
         self,
         plot_underestimate: bool = True,
         plot_overestimate: bool = True,
+        plot_width: bool = False,
         savename: str = "profile_diagnostics",
     ) -> None:
         """Create a plot showing various diagnostics to verify that the spline fit is reasonable.
@@ -479,21 +575,8 @@ class Profile(object):
         lw = 1.2
 
         # Profile
-        axLT.plot(
-            self._bins,
-            self._prof,
-            color="k",
-            linewidth=lw,
-            alpha=0.2,
-            label="Real Profile",
-        )
-        axLT.plot(
-            self._bins,
-            self._bspl(self._bins),
-            color="k",
-            linewidth=lw,
-            label="Smoothed Profile",
-        )
+        axLT.plot(self._bins, self._prof, color="k", linewidth=lw, alpha=0.2)
+        axLT.plot(self._bins, self._bspl(self._bins), color="k", linewidth=lw)
         yrangeLT = axLT.get_ylim()
 
         xpos = (xrange[1] - xrange[0]) * 0.92 + xrange[0]
@@ -507,67 +590,63 @@ class Profile(object):
         yrangeLM = axLM.get_ylim()
 
         # Derivatives
-        axLB.plot(
-            self._bins,
-            self._d1_bspl(self._bins),
-            color="k",
-            linewidth=1.2,
-            label="1st",
-        )
-        axLB.plot(
-            self._bins,
-            self._d2_bspl(self._bins),
-            color="tab:red",
-            linewidth=lw,
-            label="2nd",
-        )
+        axLB.plot(self._bins, self._d1_bspl(self._bins), color="k", linewidth=1.2, label="1st")
+        axLB.plot(self._bins, self._d2_bspl(self._bins), color="tab:red", linewidth=lw, label="2nd")
         yrangeLB = axLB.get_ylim()
 
         # Onpulse estimates
         if self._overest_onpulse_pairs is not None:
             underest_args = dict(color="tab:blue", alpha=0.2, hatch="///", zorder=0.1)
             overest_args = dict(color="tab:blue", edgecolor=None, alpha=0.2, zorder=0)
-            for pairlist, args, flag, _ in zip(
+            for pairlist, args, flag in zip(
                 [self._underest_onpulse_pairs, self._overest_onpulse_pairs],
                 [underest_args, overest_args],
                 [plot_underestimate, plot_overestimate],
-                ["Underestimate", "Overestimate"],
                 strict=True,
             ):
-                if flag:
-                    for _, op_pair in enumerate(pairlist):
-                        used_label = None
-                        # if idx == 0:
-                        #     used_label = label
-                        for ax, yrange in zip(
-                            left_axes, [yrangeLT, yrangeLM, yrangeLB], strict=True
-                        ):
-                            if op_pair[0] < op_pair[-1]:
-                                ax.fill_betweenx(
-                                    yrange, op_pair[0], op_pair[-1], label=used_label, **args
-                                )
-                            else:
-                                ax.fill_betweenx(
-                                    yrange, op_pair[0], xrange[-1], label=used_label, **args
-                                )
-                                ax.fill_betweenx(yrange, xrange[0], op_pair[-1], **args)
-                            ax.set_ylim(yrange)
+                if not flag:
+                    continue
 
-        # for root in self._d1_roots:
-        # axLT.axvline(root, lw=lw, color="tab:red", linestyle="-")
+                for op_pair in pairlist:
+                    for ax, yrange in zip(left_axes, [yrangeLT, yrangeLM, yrangeLB], strict=True):
+                        if op_pair[0] < op_pair[-1]:
+                            ax.fill_betweenx(yrange, op_pair[0], op_pair[-1], **args)
+                        else:
+                            ax.fill_betweenx(yrange, op_pair[0], xrange[-1], **args)
+                            ax.fill_betweenx(yrange, xrange[0], op_pair[-1], **args)
+                        ax.set_ylim(yrange)
+
+        # Pulse widths
+        w_info_lines = []
+        if self._widths is not None:
+            w_kwargs = dict(
+                color="tab:red", marker=".", markersize=5, linestyle=":", linewidth=lw, alpha=1.0
+            )
+            for key in self._widths.keys():
+                peak_frac, peak_frac_flux, peak_pairs = self._widths[key]
+                w_info_line = [f"W{peak_frac * 100:.0f}="]
+                for ii, ((wl, wr), width) in enumerate(peak_pairs):
+                    if ii > 0:
+                        w_info_line.append(", ")
+                    w_info_line.append(f"{width:.1f} ({width / self._nbin * 100:.1f}%)")
+                    if plot_width:
+                        if wl < wr:
+                            axLT.errorbar(x=[wl, wr], y=[peak_frac_flux] * 2, **w_kwargs)
+                        else:
+                            axLT.errorbar(x=[xrange[0], wr], y=[peak_frac_flux] * 2, **w_kwargs)
+                            axLT.errorbar(x=[wl, xrange[1]], y=[peak_frac_flux] * 2, **w_kwargs)
+                w_info_lines.append("".join(w_info_line))
 
         # Histograms
         hist_kwargs = dict(bins="knuth", density=False)
         stairs_kwargs = dict(lw=lw, edgecolor="w", fill=True)
 
-        # These don't require the offpulse
         # Residual profile
         res = self._prof - self._bspl(self._bins)
-        s, p = normaltest(res)
+        _, p = normaltest(res)
         hb = histogram(res, **hist_kwargs)
         axRM.stairs(*hb, color="tab:blue", label=f"all: {p=:.3f}", alpha=0.4, **stairs_kwargs)
 
-        # These do require the offpulse
         noff = 0
         if self._offpulse_pairs is not None:
             mask = get_profile_mask_from_pairs(self._nbin, self._offpulse_pairs)
@@ -576,12 +655,12 @@ class Profile(object):
 
                 if noff > 3:
                     # Real offpulse
-                    s, p = normaltest(self._prof[mask])
+                    _, p = normaltest(self._prof[mask])
                     hb = histogram(self._prof[mask], **hist_kwargs)
                     axRT.stairs(*hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs)
 
                     # Residual offpulse
-                    s, p = normaltest(res[mask])
+                    _, p = normaltest(res[mask])
                     hb = histogram(res[mask], **hist_kwargs)
                     axRM.stairs(*hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs)
 
@@ -605,7 +684,7 @@ class Profile(object):
             f"Nbin={self._nbin}",
             f"Nbin(on)={self._nbin - noff} ({(self._nbin - noff) / self._nbin * 100:.1f}%)",
             f"Nbin(off)={noff} ({noff / self._nbin * 100:.1f}%)",
-        ]
+        ] + w_info_lines
         axRB.text(0.0, 1.0, "\n".join(lines), **text_kwargs)
 
         # Finishing touches
@@ -635,6 +714,7 @@ class Profile(object):
 
         logger.info(f"Saving plot file: {savename}.png")
         fig.savefig(savename + ".png")
+        plt.close()
 
 
 def get_profile_mask_from_pairs(
@@ -709,7 +789,7 @@ def get_offpulse_from_onpulse(
 
 def _fill_onpulse_regions(
     onpulse_pairs: list,
-    sm_prof: BSpline,
+    bspl: BSpline,
     noise_est: float,
     sigma_cutoff: float,
     interval: tuple[float, float],
@@ -721,12 +801,14 @@ def _fill_onpulse_regions(
     ----------
     onpulse_pairs : `list`
         A list of pairs of bin indices that mark the onpulse regions of the profile.
-    sm_prof : `np.ndarray`
-        The smoothed profile.
+    bspl : `BSpline`
+        The smoothed profile as a BSpline object.
     noise_est : `float`
         The standard deviation of the offpulse noise.
     sigma_cutoff : `float`
         The number of standard deviations above which a signal will be considered real.
+    interval : `tuple[float, float]`
+        The full range of bins that the pairs are a subset of.
 
     Return:
     -------
@@ -751,12 +833,12 @@ def _fill_onpulse_regions(
         # Figure out offpulse region
         pair = [current_pair[1], next_pair[0]]
         if pair[0] < pair[1]:
-            offpulse_region = sm_prof(np.linspace(pair[0], pair[1], 1000))
+            offpulse_region = bspl(np.linspace(pair[0], pair[1], 1000))
         else:
             offpulse_region = np.concatenate(
                 [
-                    sm_prof(np.linspace(pair[0], interval[1], 1000)),
-                    sm_prof(np.linspace(interval[0], pair[1], 1000)),
+                    bspl(np.linspace(pair[0], interval[1], 1000)),
+                    bspl(np.linspace(interval[0], pair[1], 1000)),
                 ]
             )
 

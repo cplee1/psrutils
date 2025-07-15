@@ -33,6 +33,7 @@ import psrutils
 @click.option("--clean_cutoff", type=float, default=3.0, help="RM-CLEAN component S/N cutoff.")
 @click.option("--meas_rm_prof", is_flag=True, help="Measure RM_prof.")
 @click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
+@click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
 @click.option("--no_clean", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
 @click.option("--boxplot", is_flag=True, help="Plot RM_phi as boxplots.")
 @click.option("--peaks", is_flag=True, help="Plot RM measurements.")
@@ -59,6 +60,7 @@ def main(
     clean_cutoff: float,
     meas_rm_prof: bool,
     meas_rm_scat: bool,
+    meas_widths: bool,
     no_clean: bool,
     boxplot: bool,
     peaks: bool,
@@ -81,25 +83,32 @@ def main(
         max_idx = np.argmax(cube.profile)
         cube.rotate_phase((max_idx - cube.num_bin // 2) / cube.num_bin)
 
-    profile = psrutils.Profile(cube.profile / np.max(cube.profile))
+    # Note that we are normalising the profile here so that the numbers are sensible, but this
+    # needs to be accounted for when accessing the measured values later (e.g. noise_est)
+    peak_flux = np.max(cube.profile)
+    profile = psrutils.Profile(cube.profile / peak_flux)
     rv = profile.bootstrap_onpulse_regions()
     if rv != 0:
         logger.critical(f"Onpulse bootstrapping failed with code {rv}")
         exit(rv)
 
-    profile.plot_diagnostics(
-        savename=f"{cube.source}_profile_diagnostics", plot_underestimate=False
-    )
+    if meas_widths:
+        peak_fracs = [0.5, 0.1]
+        profile.measure_pulse_widths(peak_fracs=peak_fracs)
+        for peak_frac in peak_fracs:
+            w_param = f"W{peak_frac * 100:.0f}"
+            if w_param in profile._widths.keys():
+                logger.info(f"Saving CSV file: {cube.source}_{w_param}.csv")
+                with open(f"{cube.source}_{w_param}.csv", "w") as f:
+                    for width in profile._widths[w_param][2]:
+                        # Pulse width in bins
+                        f.write(f"{width[1]:.2f}\n")
 
-    psrutils.plot_profile(
-        cube,
-        offpulse_pairs=profile.offpulse_pairs,
-        onpulse_pairs=profile.overest_onpulse_pairs,
-        noise_est=profile.noise_est,
-        sm_prof=profile.ppoly(profile.bins),
-        savename=f"{cube.source}_profile",
-        save_pdf=save_pdf,
-        logger=logger,
+    profile.plot_diagnostics(
+        savename=f"{cube.source}_profile_diagnostics",
+        plot_overestimate=True,
+        plot_underestimate=False,
+        plot_width=meas_widths,
     )
 
     logger.info("Running RM-Synthesis")
@@ -135,6 +144,7 @@ def main(
         rm_phi_qty = (rm_phi_meas, rm_phi_unc)
         peak_mask = np.where(rm_phi_unc < rm_stats["rmsf_fwhm"] / 2, True, False)
 
+        logger.info(f"Saving CSV file: {cube.source}_rm_phi.csv")
         with open(f"{cube.source}_rm_phi.csv", "w") as f:
             for meas, unc in zip(rm_phi_meas, rm_phi_unc, strict=False):
                 f.write(f"{meas:.4f},{unc:.4f}\n")
