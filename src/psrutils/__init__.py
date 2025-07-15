@@ -12,9 +12,10 @@ from .rm import *
 
 __version__ = version(__name__)
 
-
 rcParams["font.size"] = 12
 rcParams["mathtext.fontset"] = "dejavuserif"
 rcParams["font.family"] = "serif"
 # rcParams["text.usetex"] = True
 # rcParams["font.serif"] = "cm"
+
+del version, rcParams

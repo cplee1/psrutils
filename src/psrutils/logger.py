@@ -1,44 +1,37 @@
 import logging
 
-__all__ = ["get_log_levels", "get_logger"]
+__all__ = ["log_levels", "setup_logger"]
+
+log_levels = dict(
+    DEBUG=logging.DEBUG,
+    INFO=logging.INFO,
+    WARNING=logging.WARNING,
+    ERROR=logging.ERROR,
+    CRITICAL=logging.CRITICAL,
+)
 
 
-def get_log_levels() -> dict:
-    """Get all available logger verbosity levels.
-
-    Returns
-    -------
-    log_levels : `dict`
-        A dictionary containing all available logger verbosity levels.
-    """
-    return dict(
-        DEBUG=logging.DEBUG,
-        INFO=logging.INFO,
-        ERROR=logging.ERROR,
-        CRITICAL=logging.CRITICAL,
-    )
-
-
-def get_logger(name: str | None = None, log_level: int | None = logging.INFO) -> logging.Logger:
-    """Initialise the custom logger.
-
-    Parameters
-    ----------
-    name : `str`, optional
-        The name of the logger. Default: `None`.
-    log_level : `int`, optional
-        The logging level. Default: `logging.INFO`.
-
-    Returns
-    -------
-    logger : `logging.Logger`
-        The custom logger.
-    """
+def setup_logger(name: str = "psrutils", log_level: str = "INFO") -> None:
+    # Get the logger
     logger = logging.getLogger(name)
-    formatter = logging.Formatter("[%(levelname)8s - %(asctime)s] %(message)s")
-    handler = logging.StreamHandler()
-    handler.setFormatter(formatter)
-    logger.setLevel(log_level)
-    logger.addHandler(handler)
+
+    # Set the verbosity level of the logger
+    logger.setLevel(log_levels.get(log_level))
+
+    # Get channel handler
+    ch = logging.StreamHandler()
+
+    # Set the verbosity level of ch
+    ch.setLevel(log_levels.get(log_level))
+
+    # Set the formatter of ch
+    formatter = logging.Formatter(
+        fmt="[%(asctime)s %(levelname)-8s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    ch.setFormatter(formatter)
+
+    # Add ch to logger
+    logger.addHandler(ch)
+
+    # Do not propagate to other packages
     logger.propagate = False
-    return logger

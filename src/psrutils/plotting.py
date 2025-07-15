@@ -24,6 +24,8 @@ __all__ = [
     "plot_rm_vs_phi",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
     return phase_bins * 360 - 180
@@ -45,10 +47,9 @@ def add_profile_to_axes(
     alpha: float = 1.0,
     bin_func: Callable[[np.ndarray], np.ndarray] | None = None,
     label: str = None,
-    logger: logging.Logger | None = None,
 ) -> tuple[np.ndarray, tuple]:
     if plot_pol:
-        profile_data = psrutils.get_bias_corrected_pol_profile(cube, logger=logger)
+        profile_data = psrutils.get_bias_corrected_pol_profile(cube)
         iquv_prof, l_prof, pa, p0_l, p0_v, sigma_i = profile_data
 
         if l_prof is None:
@@ -124,11 +125,7 @@ def add_profile_to_axes(
 
 
 def plot_profile(
-    cube: psrutils.StokesCube,
-    pol: int = 0,
-    savename: str = "profile",
-    save_pdf: bool = False,
-    logger: logging.Logger | None = None,
+    cube: psrutils.StokesCube, pol: int = 0, savename: str = "profile", save_pdf: bool = False
 ) -> None:
     """Create a plot of integrated flux density vs phase for a specified polarisation.
 
@@ -142,12 +139,7 @@ def plot_profile(
         The name of the plot file excluding the extension. Default: 'profile'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
-    logger : logging.Logger, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
@@ -184,7 +176,6 @@ def plot_pol_profile(
     savename: str = "pol_profile",
     save_pdf: bool = False,
     save_data: bool = False,
-    logger: logging.Logger | None = None,
 ) -> None:
     """Create a plot of integrated flux density vs phase for a specified polarisation.
 
@@ -214,12 +205,7 @@ def plot_pol_profile(
         Save the plot as a pdf? Default: `False`.
     save_data : `bool`, optional
         Save the plot data? Default: `False`.
-    logger : logging.Logger, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     valid_rm = False
     if rm_prof_qty is not None:
         if rm_phi_qty[1] is not None and rm_prof_qty[1] < rmsf_fwhm / 2:
@@ -269,7 +255,7 @@ def plot_pol_profile(
 
     # Add flux and PA
     bins, profile_data = psrutils.add_profile_to_axes(
-        cube, ax_pa=ax_pa, ax_prof=ax_prof, p0_cutoff=p0_cutoff, lw=lw, logger=logger
+        cube, ax_pa=ax_pa, ax_prof=ax_prof, p0_cutoff=p0_cutoff, lw=lw
     )
     iquv_prof, l_prof, pa_prof, p0_l, p0_v, sigma_i = profile_data
 
@@ -430,11 +416,7 @@ def plot_pol_profile(
 
 
 def plot_freq_phase(
-    cube: psrutils.StokesCube,
-    pol: int = 0,
-    savename: str = "freq_phase",
-    save_pdf: bool = False,
-    logger: logging.Logger | None = None,
+    cube: psrutils.StokesCube, pol: int = 0, savename: str = "freq_phase", save_pdf: bool = False
 ) -> None:
     """Create a plot of frequency vs phase for a specified polarisation.
 
@@ -448,12 +430,7 @@ def plot_freq_phase(
         The name of the plot file excluding the extension. Default: 'freq_phase'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
-    logger : logging.Logger, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
@@ -480,11 +457,7 @@ def plot_freq_phase(
 
 
 def plot_time_phase(
-    cube: psrutils.StokesCube,
-    pol: int = 0,
-    savename: str = "time_phase",
-    save_pdf: bool = False,
-    logger: logging.Logger | None = None,
+    cube: psrutils.StokesCube, pol: int = 0, savename: str = "time_phase", save_pdf: bool = False
 ) -> None:
     """Create a plot of time vs phase for a specified polarisation.
 
@@ -498,12 +471,7 @@ def plot_time_phase(
         The name of the plot file excluding the extension. Default: 'time_phase'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
-    logger : logging.Logger, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
@@ -549,7 +517,6 @@ def plot_2d_fdf(
     savename: str = "fdf",
     save_pdf: bool = False,
     dark_mode: bool = False,
-    logger: logging.Logger | None = None,
 ) -> None:
     """Plot the 1-D and 2-D FDF as a function of phase.
 
@@ -596,18 +563,11 @@ def plot_2d_fdf(
         Save the plot as a pdf? Default: `False`.
     dark_mode : `bool`, optional
         Use a black background and white lines. Default: `False`.
-    logger : logging.Logger, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     if rm_prof_qty is not None:
         cube.defaraday(rm_prof_qty[0])
 
-    iquv_prof, l_prof, pa_prof, p0_l, _, _ = psrutils.get_bias_corrected_pol_profile(
-        cube, logger=logger
-    )
+    iquv_prof, l_prof, pa_prof, p0_l, _, _ = psrutils.get_bias_corrected_pol_profile(cube)
 
     bins = np.linspace(0, 1, cube.num_bin)
 
@@ -864,7 +824,6 @@ def plot_rm_hist(
     title: str | None = None,
     savename: str = "rm_hist",
     save_pdf: bool = False,
-    logger: logging.Logger | None = None,
 ) -> None:
     """Plot a histogram of RM samples. If 'valid_samples' are provided, then
     plot them in an inset. If 'range' is also provided, then indicate this range
@@ -884,12 +843,7 @@ def plot_rm_hist(
         The name of the plot file excluding the extension. Default: 'rm_hist'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
-    logger : logging.Logger, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     fig, ax = plt.subplots(figsize=(4.5, 4), dpi=300, tight_layout=True)
     hist(samples, bins="knuth", ax=ax, histtype="stepfilled", density=True)
     main_ax = ax
@@ -935,10 +889,7 @@ def plot_rm_hist(
 
 
 def plot_rm_vs_phi(
-    rm_phi_samples: np.ndarray,
-    savename: str = "rm_phi",
-    save_pdf: bool = False,
-    logger: logging.Logger | None = None,
+    rm_phi_samples: np.ndarray, savename: str = "rm_phi", save_pdf: bool = False
 ) -> None:
     """Plot boxplots showing the distribution of RM samples for each phase bin.
 
@@ -950,12 +901,7 @@ def plot_rm_vs_phi(
         The name of the plot file excluding the extension. Default: 'rm_phi'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
-    logger : logging.Logger, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     fig, ax = plt.subplots(dpi=300, tight_layout=True)
     ax.boxplot(rm_phi_samples.T, showfliers=False)
 

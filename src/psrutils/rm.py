@@ -10,10 +10,10 @@ import psrutils
 
 __all__ = ["rm_synthesis", "rm_clean"]
 
+logger = logging.getLogger(__name__)
 
-def _fit_linear_model(
-    freqs: np.ndarray, amps: np.ndarray, logger: logging.Logger | None = None
-) -> np.ndarray:
+
+def _fit_linear_model(freqs: np.ndarray, amps: np.ndarray) -> np.ndarray:
     """Fit a linear model to spectral data.
 
     Parameters
@@ -22,17 +22,12 @@ def _fit_linear_model(
         A list of frequencies.
     amps : `np.ndarray`
         A list of amplitudes corresponding to each frequency.
-    logger: `logging.Logger`, optional
-        A logger to use. Default: `None`.
 
     Returns
     -------
     model : `np.ndarray`
         The fitted linear model evaluated at the given frequencies.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     try:
         par, _ = curve_fit(
             lambda f, s, a: s * (f / np.mean(f)) ** a,
@@ -49,11 +44,7 @@ def _fit_linear_model(
 
 
 def _normalise_spectrum(
-    P: np.ndarray,
-    S: np.ndarray,
-    freqs: np.ndarray,
-    norm: str | None = None,
-    logger: logging.Logger | None = None,
+    P: np.ndarray, S: np.ndarray, freqs: np.ndarray, norm: str | None = None
 ) -> np.ndarray:
     """Normalise the complex linear polarisation by Stokes I.
 
@@ -71,8 +62,6 @@ def _normalise_spectrum(
             'mod' - fit a linear model to Stokes I
             'val' - use per-channel Stokes I values
         Default: `None`.
-    logger : `logging.Logger`, optional
-        A logger to use. Default: `None`.
 
     Returns
     -------
@@ -81,14 +70,11 @@ def _normalise_spectrum(
     model : `np.ndarray`
         The model used, evalued at each frequency.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     if norm is None:
         model = np.float64(1.0)
     elif norm == "mod":
         # TODO: Check that 'freqs' is in the correct units here
-        model = _fit_linear_model(freqs, S, logger=logger)
+        model = _fit_linear_model(freqs, S)
     elif norm == "val":
         model = S
     else:
@@ -160,7 +146,6 @@ def rm_synthesis(
     bootstrap_nsamp: int | None = None,
     onpulse_bins: np.ndarray | None = None,
     offpulse_bins: np.ndarray | None = None,
-    logger: logging.Logger | None = None,
 ) -> None:
     """Perform RM-synthesis for each phase bin.
 
@@ -185,12 +170,7 @@ def rm_synthesis(
         A list of bins corresponding to the onpulse region. Default: `None`.
     offpulse_bins : `np.ndarray`, optional
         The bin indices of the offpulse window. Default: `None`.
-    logger : `logging.Logger`, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     # Compute squared wavelengths and reference squared wavelength
     l2 = cube.lambda_sq
     l2_0 = np.mean(l2)
@@ -266,7 +246,7 @@ def rm_synthesis(
         K = 1.0 / np.sum(W)
 
         # Perform RM synthesis on the real observed data (for plotting)
-        P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm, logger)
+        P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm)
         rmsf[bin] = psrutils.dft_kernel(W, rmsf[bin], rmsf_phi, l2, l2_0, K)
         fdf[bin] = psrutils.dft_kernel(P * W, fdf[bin], phi, l2, l2_0, K)
 
@@ -293,9 +273,7 @@ def rm_synthesis(
                     K = 1.0 / np.sum(W)
                     Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                     U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                    P, model = _normalise_spectrum(
-                        Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm, logger
-                    )
+                    P, model = _normalise_spectrum(Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm)
                     tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                     tmp_prof_fdf += np.abs(tmp_fdf)
                 tmp_prof_fdf /= len(onpulse_bins)
@@ -315,11 +293,11 @@ def rm_synthesis(
             for iter in trange(bootstrap_nsamp):
                 Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                 U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                P, model = _normalise_spectrum(Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm, logger)
+                P, model = _normalise_spectrum(Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm)
                 tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                 rm_scat_samples[iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
         else:
-            P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm, logger)
+            P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm)
             tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
             rm_scat_samples, _ = _measure_rm(phi, np.abs(tmp_fdf))
     else:
@@ -336,7 +314,6 @@ def _rm_clean_1d(
     niter: int = 2000,
     gain: float = 0.1,
     cutoff: float = 3.0,
-    logger: logging.Logger | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Deconvolve the RMSF from the FDF using the RM-CLEAN algorithm.
 
@@ -356,12 +333,7 @@ def _rm_clean_1d(
         RM-CLEAN gain. Default: 0.1.
     cutoff : `float`, optional
         RM-CLEAN component cutoff in sigma. Default: 3.0.
-    logger : `logging.Logger`, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     nphi = len(phi)
     dphi = np.min(np.diff(phi))
     rmsf_fwhm_pix = int(rmsf_fwhm / dphi + 0.5)
@@ -410,7 +382,6 @@ def rm_clean(
     niter: int = 2000,
     gain: float = 0.1,
     cutoff: float = 3.0,
-    logger: logging.Logger | None = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Deconvolve the RMSF from the FDF using the RM-CLEAN algorithm.
 
@@ -430,25 +401,18 @@ def rm_clean(
         RM-CLEAN gain. Default: 0.1.
     cutoff : `float`, optional
         RM-CLEAN component cutoff in sigma. Default: 3.0.
-    logger : `logging.Logger`, optional
-        A logger to use. Default: `None`.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     cln_fdf = np.empty_like(fdf)
     cln_model = np.empty_like(fdf)
     cln_comps = np.empty_like(fdf)
     cln_res = np.empty_like(fdf)
 
     if fdf.ndim == 1:
-        rmcln_result = _rm_clean_1d(phi, fdf, rmsf, rmsf_fwhm, niter, gain, cutoff, logger)
+        rmcln_result = _rm_clean_1d(phi, fdf, rmsf, rmsf_fwhm, niter, gain, cutoff)
         cln_fdf[:], cln_model[:], cln_comps[:], cln_res[:] = rmcln_result
     elif fdf.ndim == 2:
         for bin in range(fdf.shape[0]):
-            rmcln_result = _rm_clean_1d(
-                phi, fdf[bin], rmsf[bin], rmsf_fwhm, niter, gain, cutoff, logger
-            )
+            rmcln_result = _rm_clean_1d(phi, fdf[bin], rmsf[bin], rmsf_fwhm, niter, gain, cutoff)
             cln_fdf[bin, :], cln_model[bin, :], cln_comps[bin, :], cln_res[bin, :] = rmcln_result
     else:
         raise ValueError("The FDF must have dimensions of (phi) or (phase, phi).")

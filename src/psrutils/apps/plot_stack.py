@@ -29,6 +29,8 @@ def main(
     plot_ctrline: bool,
     plot_pol: bool,
 ) -> None:
+    psrutils.setup_logger()
+
     if ncols * nrows < len(spec_files):
         raise ValueError("To few subplots for the provided archives.")
 
@@ -36,8 +38,6 @@ def main(
         zoom = (-180, 180)
     elif zoom[1] < zoom[0]:
         zoom = (zoom[1], zoom[0])
-
-    logger = psrutils.get_logger()
 
     fig = plt.figure(figsize=(ncols * colsize, nrows * rowsize), dpi=300, tight_layout=True)
 
@@ -119,7 +119,6 @@ def main(
                     plot_pol=plot_pol,
                     lw=lw,
                     I_colour=I_colour,
-                    logger=logger,
                 )
             else:
                 psrutils.add_profile_to_axes(
@@ -130,7 +129,6 @@ def main(
                     plot_pol=plot_pol,
                     lw=lw,
                     I_colour=I_colour,
-                    logger=logger,
                 )
             minfreq = f"{cube.min_freq:.0f}"
             maxfreq = f"{cube.max_freq:.0f}"

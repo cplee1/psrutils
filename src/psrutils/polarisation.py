@@ -18,10 +18,11 @@ __all__ = [
     "get_delta_vi",
 ]
 
+logger = logging.getLogger(__name__)
+
 
 def get_bias_corrected_pol_profile(
     cube: psrutils.StokesCube,
-    logger: logging.Logger | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
     """Get the full polarisation profile and correct for bias in the linear
     polarisation degree and angle. If no polarisation information is found in
@@ -32,8 +33,6 @@ def get_bias_corrected_pol_profile(
     ----------
     cube : `psrutils.StokesCube`
         A StokesCube object.
-    logger : `logging.Logger`, optional
-        A logger to use. Default: `None`.
 
     Returns
     -------
@@ -50,9 +49,6 @@ def get_bias_corrected_pol_profile(
     sigma_i : `float | None`
         The standard deviation of the offpulse noise in the Stokes I profile.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     iquv_profile = cube.pol_profile
 
     # Default if the archive does not contain polarisation information
@@ -124,7 +120,6 @@ def compute_sigma_pa_table(
     sigma_pa_num: int = 1000,
     savename: str = "sigma_pa_table",
     make_plot: bool = False,
-    logger: logging.Logger | None = None,
 ) -> None:
     """Compute the analytical distribution of position angles for an array
     of polarisation measures between p0_min and p0_max in steps of p0_step.
@@ -151,12 +146,7 @@ def compute_sigma_pa_table(
         The name of the output table (without extension). Default: "sigma_pa_table".
     make_plot : `bool`, optional
         Make a plot of the results. Default: `False`.
-    logger : `logging.Logger`, optional
-        A logger to use. Default: None.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     p0 = np.arange(p0_min, p0_max, p0_step, dtype=np.float64)
     sigma_pa_table = np.empty(shape=(2, sigma_pa_num), dtype=np.float64)
     sigma_pa_range = np.linspace(0, np.pi / 2, sigma_pa_num, dtype=np.float64)
@@ -213,11 +203,7 @@ def pa_dist(
     return G_pa
 
 
-def get_delta_vi(
-    cube: psrutils.StokesCube,
-    onpulse_bins: np.ndarray | None = None,
-    logger: logging.Logger | None = None,
-) -> np.ndarray:
+def get_delta_vi(cube: psrutils.StokesCube, onpulse_bins: np.ndarray | None = None) -> np.ndarray:
     """Calculate the change in Stokes V/I over the observing bandwidth.
 
     Parameters
@@ -226,17 +212,12 @@ def get_delta_vi(
         A StokesCube object.
     onpulse_bins : `np.ndarray`, optional
         A list of bins corresponding to the on-pulse region. Default: `None`.
-    logger : `logging.Logger`, optional
-        A logger to use. Default: `None`.
 
     Returns
     -------
     delta_vi : `np.ndarray`
         The change in Stokes V/I calculated per bin.
     """
-    if logger is None:
-        logger = psrutils.get_logger()
-
     freqs = cube.freqs / 1e6  # MHz
     spectra = cube.subbands  # -> (pol, freq, phase)
     vi_spectra = spectra[3] / spectra[0]

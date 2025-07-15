@@ -1,3 +1,5 @@
+import logging
+
 import click
 import matplotlib as mpl
 import matplotlib.pyplot as plt
@@ -5,6 +7,8 @@ import numpy as np
 import psrqpy
 
 import psrutils
+
+logger = logging.getLogger(__name__)
 
 
 @click.command()
@@ -26,6 +30,8 @@ def main(
     zoom: tuple[float, float],
     plot_ctrline: bool,
 ) -> None:
+    psrutils.setup_logger()
+
     if ncols * nrows < len(spec_files):
         raise ValueError("To few subplots for the provided archives.")
 
@@ -33,8 +39,6 @@ def main(
         zoom = (-180, 180)
     elif zoom[1] < zoom[0]:
         zoom = (zoom[1], zoom[0])
-
-    logger = psrutils.get_logger()
 
     fig = plt.figure(figsize=(ncols * colsize, nrows * rowsize), dpi=300, tight_layout=True)
 

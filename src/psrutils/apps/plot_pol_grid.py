@@ -9,6 +9,8 @@ from uncertainties import ufloat
 
 import psrutils
 
+logger = logging.getLogger(__name__)
+
 
 def max_peak_to_peak(data, unc):
     max_p2p = 0
@@ -30,11 +32,7 @@ def make_figure(
     rowsize: float,
     p0_cutoff: float,
     savename: str = "pol_plot_grid",
-    logger: logging.Logger | None = None,
 ) -> None:
-    if logger is None:
-        logger = psrutils.get_logger()
-
     query = psrqpy.QueryATNF()
     print(f"Using PSRCAT v{query.get_version}")
     psrs = query.get_pulsars()
@@ -252,7 +250,6 @@ def make_figure(
             if row == nrows - 1:
                 ax_pr.set_xlabel("Pulse Longitude [deg]")
 
-    logger.info(f"Saving plot file: {savename}.png")
     fig.savefig(savename + ".png")
     fig.savefig(savename + ".pdf")
     plt.close()
@@ -270,7 +267,7 @@ def make_figure(
 def main(
     csvfiles: tuple, ncols: int, nrows: int, colsize: float, rowsize: float, p0_cutoff: float
 ) -> None:
-    logger = psrutils.get_logger()
+    psrutils.setup_logger()
 
     # Filter out bad detections
     best_csvfiles = []
@@ -306,5 +303,4 @@ def main(
             rowsize,
             p0_cutoff,
             savename=f"pol_plot_grid_{ifig}",
-            logger=logger,
         )

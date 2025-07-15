@@ -38,22 +38,17 @@ def main(
     rotate: float,
     phase_plotlim: Tuple[float, float],
 ) -> None:
-    log_level_dict = psrutils.get_log_levels()
-    logger = psrutils.get_logger(log_level=log_level_dict[log_level])
+    psrutils.setup_logger("psrutils", log_level)
 
     cube = psrutils.StokesCube.from_psrchive(
         archive, clone=False, tscrunch=tscr, fscrunch=fscr, bscrunch=bscr, rotate_phase=rotate
     )
 
     if plot_tvsp:
-        click.echo("Plotting time vs phase")
-        psrutils.plotting.plot_time_phase(cube, logger=logger)
+        psrutils.plotting.plot_time_phase(cube)
     if plot_fvsp:
-        click.echo("Plotting frequency vs phase")
-        psrutils.plotting.plot_freq_phase(cube, logger=logger)
+        psrutils.plotting.plot_freq_phase(cube)
     if plot_prof:
-        click.echo("Plotting profile")
-        psrutils.plotting.plot_profile(cube, logger=logger)
+        psrutils.plotting.plot_profile(cube)
     if plot_pol_prof:
-        click.echo("Plotting polarisation profile")
-        psrutils.plotting.plot_pol_profile(cube, phase_range=phase_plotlim, logger=logger)
+        psrutils.plotting.plot_pol_profile(cube, phase_range=phase_plotlim)

@@ -1,9 +1,12 @@
+import logging
 import warnings
 
 import click
 import numpy as np
 
 import psrutils
+
+logger = logging.getLogger(__name__)
 
 
 @click.command()
@@ -13,7 +16,7 @@ import psrutils
 @click.option(
     "-L",
     "log_level",
-    type=click.Choice(["DEBUG", "INFO", "ERROR"], case_sensitive=False),
+    type=click.Choice(psrutils.log_levels.keys(), case_sensitive=False),
     default="INFO",
     help="The logger verbosity level.",
 )
@@ -71,8 +74,7 @@ def main(
     save_pdf: bool,
     dark_mode: bool,
 ) -> None:
-    log_level_dict = psrutils.get_log_levels()
-    logger = psrutils.get_logger(__name__, log_level=log_level_dict[log_level])
+    psrutils.setup_logger("psrutils", log_level)
 
     logger.info(f"Loading archive: {archive}")
     cube = psrutils.StokesCube.from_psrchive(archive, False, 1, fscr, bscr, rotate)
@@ -121,7 +123,6 @@ def main(
         bootstrap_nsamp=nsamp,
         onpulse_bins=profile.overest_onpulse_bins,
         offpulse_bins=profile.offpulse_bins,
-        logger=logger,
     )
     fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
     logger.info(rm_stats)
@@ -151,10 +152,7 @@ def main(
 
         if boxplot:
             psrutils.plotting.plot_rm_vs_phi(
-                rm_phi_samples,
-                savename=f"{cube.source}_rm_phi_boxplot",
-                save_pdf=save_pdf,
-                logger=logger,
+                rm_phi_samples, savename=f"{cube.source}_rm_phi_boxplot", save_pdf=save_pdf
             )
 
         if meas_rm_prof:
@@ -181,7 +179,6 @@ def main(
                 title=cube.source.replace("-", "$-$"),
                 savename=f"{cube.source}_rm_prof_hist",
                 save_pdf=save_pdf,
-                logger=logger,
             )
         else:
             rm_prof_qty = None
@@ -199,7 +196,6 @@ def main(
                 title=cube.source,
                 savename=f"{cube.source}_rm_scat_hist",
                 save_pdf=save_pdf,
-                logger=logger,
             )
     else:
         rm_phi_qty = (rm_phi_samples, None)
@@ -219,7 +215,7 @@ def main(
     else:
         logger.info("Running RM-CLEAN")
         rmcln_result = psrutils.rm_clean(
-            phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, cutoff=clean_cutoff, logger=logger
+            phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, cutoff=clean_cutoff
         )
         cln_fdf = rmcln_result[0]
         if plot_clean_comps:
@@ -227,9 +223,7 @@ def main(
 
     meas_delta_vi = True
     if meas_delta_vi:
-        delta_vi = psrutils.get_delta_vi(
-            cube, onpulse_bins=profile.overest_onpulse_bins, logger=logger
-        )
+        delta_vi = psrutils.get_delta_vi(cube, onpulse_bins=profile.overest_onpulse_bins)
 
     logger.info("Plotting")
     psrutils.plotting.plot_2d_fdf(
@@ -252,7 +246,6 @@ def main(
         savename=f"{cube.source}_fdf",
         save_pdf=save_pdf,
         dark_mode=dark_mode,
-        logger=logger,
     )
 
     if plot_pol_prof:
@@ -268,5 +261,4 @@ def main(
             savename=f"{cube.source}_pol_profile",
             save_pdf=save_pdf,
             save_data=True,
-            logger=logger,
         )

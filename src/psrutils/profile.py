@@ -9,12 +9,9 @@ from astropy.stats import histogram
 from scipy.interpolate import BSpline, PPoly, splrep
 from scipy.stats import normaltest
 
-from .logger import get_logger
-
-logger = get_logger(__name__, log_level=logging.DEBUG)
-
-
 __all__ = ["Profile", "get_profile_mask_from_pairs", "get_offpulse_from_onpulse"]
+
+logger = logging.getLogger(__name__)
 
 
 class Profile(object):
