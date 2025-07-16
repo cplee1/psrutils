@@ -1,5 +1,6 @@
 import itertools
 import logging
+from typing import Iterable
 
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
@@ -32,7 +33,10 @@ class Profile(object):
 
         self._prof = profile
         self._nbin = profile.size
-        self._bins = np.arange(profile.size, dtype=int)
+        self._bins = np.arange(self._nbin, dtype=int)
+        self._llim = self._bins[0]
+        self._rlim = self._bins[0] + self._nbin
+        self._lims = (self._llim, self._rlim)
         self._noise_est: np.float_ | None = None
 
     @property
@@ -208,170 +212,102 @@ class Profile(object):
         self._d1_ppoly = d1_ppoly
         self._d2_ppoly = d2_ppoly
 
-    def find_onpulse_regions(
+    def get_onpulse_regions(
         self, noise_est: float | None = None, sigma_cutoff: float = 2.0
-    ) -> int:
-        """Find under- and over-estimates of the onpulse region(s).
+    ) -> tuple[
+        list[tuple[np.float_, np.float_]] | None,
+        list[tuple[np.float_, np.float_]] | None,
+        list[np.float_] | None,
+    ]:
+        """Find under- and over-estimates of the onpulse region(s) using the following method:
+
+        (1) Fit a smoothing spline with the smoothness parameter set to `nbin*noise_est**2`.
+
+        (2) Find the maxima of the profile that exceed `noise_est*sigma_cutoff`.
+
+        (3) Find the flanking inflections and minima around the maxima. These define the under- and
+            over-estimates of the onpulse regions, respectively. If the flux between two adjacent
+            onpulse regions exceeds `noise_est*sigma_cutoff`, then considered them a single region.
 
         Parameters
         ----------
         noise_est : `float`, optional
             An estimate of the standard deviation of the offpulse noise that will be used to
-            determine if a pulse peak exceeds the sigma cutoff.
+            determine if a pulse peak exceeds the sigma cutoff. If `None` is given, then the noise
+            will be estimated using the `get_simple_noise_est()` method. Default: `None`.
         sigma_cutoff : `float`, optional
             The number of standard deviations above which a peak will be considered real.
             Default: 2.0.
 
         Returns
         -------
-        rv : `int`
-            A return value: 0 for success; non-zero otherwise.
+        underest_onpulse_pairs : `list[tuple[np.float_, np.float_]] | None`
+            A list of intervals defining the underestimated onpulse region(s) in bin units.
+        overest_onpulse_pairs : `list[tuple[np.float_, np.float_]] | None`
+            A list of intervals defining the overestimated onpulse region(s) in bin units.
+        true_maxima : `list[np.float_] | None`
+            A list of profile maxima above the sigma threshold in bin units.
+        minima : `list[np.float_] | None`
+            A list of all profile minima in bin units.
         """
         if noise_est is None:
-            if not self._noise_est:
-                noise_est = self.get_simple_noise_est()
-            else:
-                noise_est = self._noise_est
+            noise_est = self.get_simple_noise_est()
 
+        # This will update the non-public spline attributes
         self.fit_spline(noise_est)
 
-        # Evaluate derivatives and roots
+        # Evaluate the roots of the spline derivatives
         try:
-            d1_roots = self._d1_ppoly.roots(extrapolate="periodic")
-            d2_roots = self._d2_ppoly.roots(extrapolate="periodic")
+            d1_roots = self._d1_ppoly.roots()
+            d2_roots = self._d2_ppoly.roots()
         except ValueError:
-            logger.warning("Roots of spline could not be found.")
-            return 1
+            logger.error("Roots of spline could not be found.")
+            return None, None, None
 
-        # Filter out extrapolated roots
-        d1_roots_inbounds = []
-        for root in d1_roots:
-            # Note that we are evaluating the roots continously, so the interval is (0, Nbin)
-            if root < self._bins[0] or root > self._bins[0] + self._nbin:
-                continue
-            d1_roots_inbounds.append(root)
-        d1_roots = d1_roots_inbounds
-
-        d2_roots_inbounds = []
-        for root in d2_roots:
-            if root < self._bins[0] or root > self._bins[-1]:
-                continue
-            d2_roots_inbounds.append(root)
-        d2_roots = d2_roots_inbounds
-
-        self._d1_roots = d1_roots
-        self._d2_roots = d2_roots
+        # Remove out-of-bounds roots
+        d1_roots = _get_inbounds_roots(d1_roots, self._lims)
+        d2_roots = _get_inbounds_roots(d2_roots, self._lims)
 
         # Catagorise minima and maxima
-        minima = []
         true_maxima = []
-        false_maxima = []
+        minima = []
         for root in d1_roots:
             if self._d2_bspl(root) > 0:  # Minimum
                 minima.append(root)
             else:  # Maximum
                 if self._bspl(root) > noise_est * sigma_cutoff:
+                    # We only care about true maxima
                     true_maxima.append(root)
-                else:
-                    false_maxima.append(root)
 
         if not true_maxima:
-            logger.warning(f"No profile maxima found >{sigma_cutoff} sigma.")
-            return 2
+            logger.error(f"No profile maxima found above {sigma_cutoff} sigma.")
+            return None, None, None
 
-        underest_onpulse_pairs = []
-        overest_onpulse_pairs = []
-        for d1_root in true_maxima:
-            # Underestimated onpulse
-            # Figure out which two inflections (d2 roots) flank the maximum (d1 root)
-            d2_roots = sorted(np.append(d2_roots, d1_root))
-            mloc = d2_roots.index(d1_root)
-            d2_roots.remove(d1_root)
-            try:
-                underestimate = [d2_roots[mloc - 1], d2_roots[mloc]]
-            except IndexError:
-                # The next inflection is on the other side of the profile
-                if mloc == 0:  # Left side
-                    underestimate = [d2_roots[-1], d2_roots[mloc]]
-                else:  # Right side
-                    underestimate = [d2_roots[mloc - 1], d2_roots[0]]
-            underest_onpulse_pairs.append(underestimate)
+        # The underestimate is defined by the flanking inflections
+        underest_onpulse_pairs = _get_flanking_roots(true_maxima, d2_roots)
 
-            # Overestimated onpulse
-            # Figure out which two false minima (d1 roots) flank the maximum (d1 root)
-            minima = sorted(np.append(minima, d1_root))
-            mloc = minima.index(d1_root)
-            minima.remove(d1_root)
-            try:
-                overestimate = [minima[mloc - 1], minima[mloc]]
-            except IndexError:
-                # The next inflection is on the other side of the profile
-                if mloc == 0:  # Left side
-                    overestimate = [minima[-1], minima[mloc]]
-                else:  # Right side
-                    overestimate = [minima[mloc - 1], minima[0]]
-
-            # If the bounds are touching
-            if overest_onpulse_pairs and overestimate[0] == overest_onpulse_pairs[-1][1]:
-                # logger.debug("Boundaries touching")
-                overest_onpulse_pairs[-1][1] = overestimate[1]
-            # If the last element wraps around to the first
-            elif overest_onpulse_pairs and overestimate[1] == overest_onpulse_pairs[0][0]:
-                logger.debug("Last element wraps around to first")
-                overest_onpulse_pairs[0][0] = overestimate[0]
-            else:
-                overest_onpulse_pairs.append(overestimate)
+        # The overestimate is defined by the flanking minima
+        overest_onpulse_pairs = _get_flanking_roots(true_maxima, minima)
 
         # Fill the onpulse regions if there is signal between them
-        if underest_onpulse_pairs is not None:
-            underest_onpulse_pairs = _fill_onpulse_regions(
-                underest_onpulse_pairs,
-                self._bspl,
-                noise_est,
-                sigma_cutoff,
-                (self._bins[0], self._bins[0] + self._nbin),
-            )
-        if overest_onpulse_pairs is not None:
-            overest_onpulse_pairs = _fill_onpulse_regions(
-                overest_onpulse_pairs,
-                self._bspl,
-                noise_est,
-                sigma_cutoff,
-                (self._bins[0], self._bins[0] + self._nbin),
-            )
+        underest_onpulse_pairs = _fill_onpulse_regions(
+            underest_onpulse_pairs, self._bspl, noise_est, sigma_cutoff, self._lims
+        )
+        overest_onpulse_pairs = _fill_onpulse_regions(
+            overest_onpulse_pairs, self._bspl, noise_est, sigma_cutoff, self._lims
+        )
 
-        self._maxima = true_maxima
-        self._underest_onpulse_pairs = underest_onpulse_pairs
-        self._overest_onpulse_pairs = overest_onpulse_pairs
-
-        return 0
+        return underest_onpulse_pairs, overest_onpulse_pairs, true_maxima, minima
 
     def bootstrap_onpulse_regions(
         self, ntrials: int = 10, tol: float = 0.05, sigma_cutoff: float = 2.0
-    ) -> int:
-        """Bootstrap the onpulse finding method by fitting a new spline with the estimated offpulse
-        noise on each iteration.
+    ) -> None:
+        """Bootstrap the onpulse-finding method by fitting a spline with the new estimated offpulse
+        noise on each iteration. The bootstrapping is repeated until either the maximum number of
+        trials has been reaches or the fractional difference between subsequent noise estimates
+        falls below a specified tolerance.
 
-        The algorithm follows these steps:
-
-        (1) Make an initial estimate of the offpulse noise by finding the pulse window which
-            minimises the integrated signal within it.
-
-        (2) Fit a periodic smoothing spline with the smoothness parameter set to
-            `nbin*noise_est**2`.
-
-        (3) Find the maxima of the profile which exceed `noise_est*sigma_cutoff`. If no maxima
-            exceed the cutoff, then return `None` for each output.
-
-        (4) Find the flanking inflections and minima around the maxima. These define the under- and
-            over-estimates of the onpulse regions. If the flux between two onpulse regions exceeds
-            the sigma cutoff, then those regions are considered a single region.
-
-        (5) Calculate the standard deviation of the offpulse noise, where the offpulse is all bins
-            not included in the onpulse overestimate.
-
-        (6) Repeat (2)-(5) until `ntrials` have been reached or the fractional difference between
-            subsequent noise estimates is below `tol`.
+        See the `get_onpulse_regions()` method for further details.
 
         Parameters
         ----------
@@ -383,72 +319,73 @@ class Profile(object):
         sigma_cutoff : `float`, optional
             The number of standard deviations above which a peak will be considered real.
             Default 2.0.
-
-        Returns
-        -------
-        rv : `int`
-            A return value: 0 for success; non-zero otherwise.
         """
         logger.debug("Bootstrapping to estimate onpulse...")
 
         old_noise_est = self.get_simple_noise_est()
         logger.debug(f"Initial noise estimate: {old_noise_est}")
-        rv = self.find_onpulse_regions(old_noise_est, sigma_cutoff=sigma_cutoff)
-        if rv != 0:
-            return rv
-        if self._overest_onpulse_pairs is None:
-            return 3
 
-        old_offpulse_pairs = get_offpulse_from_onpulse(self._overest_onpulse_pairs)
-        old_over = self._overest_onpulse_pairs
-        old_under = self._underest_onpulse_pairs
+        underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
+            old_noise_est, sigma_cutoff=sigma_cutoff
+        )
+        if not overest_onpp or not underest_onpp:
+            raise RuntimeError("Bootstrapping failed on initial run")
+
+        old_offpp = get_offpulse_from_onpulse(overest_onpp)
+        old_overest_onpp = overest_onpp
+        old_underest_onpp = underest_onpp
+        old_maxima = maxima
+        old_minima = minima
 
         for trial in range(ntrials):
             # Calculate the offpulse noise
-            mask = get_profile_mask_from_pairs(self._nbin, old_offpulse_pairs)
+            mask = get_profile_mask_from_pairs(self._nbin, old_offpp)
 
             if np.all(np.logical_not(mask)):
-                logger.debug("Offpulse and onpulse region cannot be separated")
+                logger.warning("Offpulse and onpulse region cannot be separated")
                 break
 
             new_noise_est = np.nanstd(self._prof[mask])
 
             if np.isclose(new_noise_est, 0.0):
-                logger.debug("Noise estimate is zero")
+                logger.warning("New noise estimate is zero")
                 break
 
             # Check whether the tolerance level has been reached
             tollvl = abs((old_noise_est - new_noise_est) / new_noise_est)
-            logger.debug(f"Iteration {trial}: {new_noise_est=} {tollvl=}")
+            logger.debug(f"Trial {trial}: {new_noise_est=} {tollvl=}")
 
             if tollvl <= tol:
                 logger.debug(f"Took {trial + 1} trials to reach tolerance")
                 break
 
             if trial + 1 == ntrials:
-                logger.debug("Reached max number of trials")
+                logger.debug(f"Reached max number of trials ({ntrials})")
                 break
 
             # Perform the analysis
-            rv = self.find_onpulse_regions(new_noise_est, sigma_cutoff=sigma_cutoff)
-            if rv != 0:
+            underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
+                new_noise_est, sigma_cutoff=sigma_cutoff
+            )
+            if not overest_onpp or not underest_onpp:
                 # Roll back the spline attributes to the previous fit
+                logger.warning(f"Bootstrapping failed on trial {trial}")
                 self.fit_spline(old_noise_est)
                 break
-            if self._overest_onpulse_pairs is None:
-                return 3
 
-            old_offpulse_pairs = get_offpulse_from_onpulse(self._overest_onpulse_pairs)
-            old_over = self._overest_onpulse_pairs
-            old_under = self._underest_onpulse_pairs
+            old_offpp = get_offpulse_from_onpulse(overest_onpp)
+            old_overest_onpp = overest_onpp
+            old_underest_onpp = underest_onpp
+            old_maxima = maxima
+            old_minima = minima
             old_noise_est = new_noise_est
 
-        self._overest_onpulse_pairs = old_over
-        self._underest_onpulse_pairs = old_under
-        self._offpulse_pairs = old_offpulse_pairs
+        self._offpulse_pairs = old_offpp
+        self._overest_onpulse_pairs = old_overest_onpp
+        self._underest_onpulse_pairs = old_underest_onpp
+        self._maxima = old_maxima
+        self._minima = old_minima
         self._noise_est = old_noise_est
-
-        return 0
 
     def measure_pulse_widths(self, peak_fracs: list | None = None, sigma_cutoff: int = 2.0) -> None:
         """Measure the pulse width(s) at a given fraction of the peak flux density.
@@ -461,10 +398,11 @@ class Profile(object):
             The number of standard deviations above which a peak will be considered real.
             Default 2.0.
         """
-        assert self._ppoly is not None
-        assert self._d1_ppoly is not None
-        assert self._maxima is not None
-        assert self._noise_est is not None
+        assert self._ppoly
+        assert self._d1_ppoly
+        assert self._maxima
+        assert self._minima
+        assert self._noise_est
 
         if peak_fracs is None:
             peak_fracs = [0.5, 0.1]
@@ -477,21 +415,17 @@ class Profile(object):
             if peak_snr < 1 / peak_frac:
                 logger.debug(f"Skipping W{peak_frac * 100:.0f} - not enough S/N")
                 continue
+            logger.debug(f"Measuring W{peak_frac * 100:.0f} for S/N={peak_snr:.1f}")
 
-            roots = self._ppoly.solve(peak_frac * peak_flux, extrapolate="periodic")
+            roots = self._ppoly.solve(peak_frac * peak_flux)
 
-            # Filter out extrapolated roots
-            roots_inbounds = []
-            for root in roots:
-                # Note that we are evaluating the roots continously, so the interval is (0, Nbin)
-                if root < self._bins[0] or root > self._bins[0] + self._nbin:
-                    continue
-                roots_inbounds.append(root)
-            roots = roots_inbounds
+            # Remove out-of-bounds roots
+            roots = _get_inbounds_roots(roots, self._lims)
 
             # There must be an even number of roots
-            assert len(roots) % 2 == 0
+            assert len(roots) % 2 == 0, f"{len(roots)} is not divisible by 2"
 
+            # Match each leading edge root with its corresponding trailing edge root
             root_pairs = []
             current_pair = []
             for ii in range(len(roots)):
@@ -510,14 +444,14 @@ class Profile(object):
                     current_pair = []
 
             # Sanity check
-            assert len(root_pairs) == len(roots) / 2
+            assert len(root_pairs) == len(roots) / 2, "root pairing unsuccessful"
 
+            # Merge the pairs if they are contained within the same overestimated onpulse region
+            root_pairs = _get_contiguous_regions(root_pairs, self._minima)
+
+            # Fill the pairs if there is signal between them
             root_pairs = _fill_onpulse_regions(
-                root_pairs,
-                self._bspl,
-                self._noise_est,
-                sigma_cutoff,
-                (self._bins[0], self._bins[0] + self._nbin),
+                root_pairs, self._bspl, self._noise_est, sigma_cutoff, self._lims
             )
 
             widths = []
@@ -525,9 +459,7 @@ class Profile(object):
                 if root_pair[0] < root_pair[1]:
                     width = root_pair[1] - root_pair[0]
                 else:
-                    width = (root_pair[1] - self._bins[0]) + (
-                        self._bins[0] + self._nbin - root_pair[0]
-                    )
+                    width = root_pair[1] - self._llim + self._rlim - root_pair[0]
                 widths.append((root_pair, width))
 
             widths_dict[f"W{peak_frac * 100:.0f}"] = (peak_frac, peak_frac * peak_flux, widths)
@@ -714,89 +646,125 @@ class Profile(object):
         plt.close()
 
 
-def get_profile_mask_from_pairs(
-    nbin: int, bin_pairs: list[tuple[np.int_, np.int_]]
-) -> npt.NDArray[np.bool_]:
-    """Return a profile with the regions defined by the bin_pairs filled with NaNs.
+def _get_inbounds_roots(
+    roots: Iterable[np.float_], bounds: tuple[np.float_, np.float_]
+) -> npt.NDArray[np.float_]:
+    """Return the roots within the specified bounds.
 
     Parameters
     ----------
-    nbin : `int`
-        The number of phase bins in the profile.
-    bin_pairs : `list`
-        A list of pairs of bin indices defining the profile region(s).
+    roots : `Iterable[np.float_]`
+        A list of roots.
+    bounds : `tuple[np.float_, np.float_]`
+        The bounds to enforce.
 
     Returns
     -------
-    mask : `np.ndarray`
-        A profile mask that is True between the bin pairs.
-    masked_profile : `np.ndarray`
-        The profile with the regions between the bin pairs filled with Nans.
+    inbounds_roots : `npt.NDArray[np.float_]`
+        An array of roots within the bounds.
     """
-    assert bin_pairs is not None
+    inbounds_roots = []
+    for root in roots:
+        if root >= bounds[0] and root < bounds[1]:
+            inbounds_roots.append(root)
+    return np.array(inbounds_roots)
 
-    bins = np.arange(nbin, dtype=float)
-    mask = np.full(nbin, False)
 
-    if len(bin_pairs) == 1 and bin_pairs[0][0] == bin_pairs[0][1]:
-        return mask
+def _get_flanking_roots(
+    locs: Iterable[np.float_], roots: Iterable[np.float_]
+) -> list[tuple[np.float_, np.float_]]:
+    """Return the pairs of flanking roots around each location.
 
-    for pair in bin_pairs:
-        if pair[0] == pair[1]:
-            continue
-        elif pair[0] < pair[1]:
-            mask = np.logical_or(mask, np.logical_and(bins > pair[0], bins < pair[1]))
+    Parameters
+    ----------
+    locs : `Iterable[np.float_]`
+        A list of profile locations.
+    roots : `Iterable[np.float_]`
+        A list of profile roots.
+
+    Returns
+    -------
+    pairs : `list[tuple[np.float_, np.float_]]`
+        A list of pairs of roots around the specified locations.
+    """
+    pairs = []
+    for loc in locs:
+        # Figure out which two roots flank the maximum
+        roots = sorted(np.append(roots, loc))
+        ridx = roots.index(loc)
+        roots.remove(loc)
+        try:
+            pair = [roots[ridx - 1], roots[ridx]]
+        except IndexError:
+            # The next root is on the other side of the profile
+            if ridx == 0:  # Left side
+                pair = [roots[-1], roots[ridx]]
+            else:  # Right side
+                pair = [roots[ridx - 1], roots[0]]
+
+        if pairs and pair[0] == pairs[-1][1]:
+            # If the bounds are touching
+            pairs[-1][1] = pair[1]
+        elif pairs and pair[1] == pairs[0][0]:
+            # If the last element wraps around to the first
+            pairs[0][0] = pair[0]
         else:
-            mask = np.logical_or(mask, bins > pair[0])
-            mask = np.logical_or(mask, bins < pair[1])
-    return mask
+            pairs.append(pair)
+    return [tuple(pair) for pair in pairs]
 
 
-def get_offpulse_from_onpulse(
-    onpulse_pairs: list[tuple[np.int_, np.int_]],
-) -> list[tuple[np.int_, np.int_]]:
-    """Given a list of pairs of bin indices defining the onpulse regions, find the corresponding
-    list of pairs of bin indices defining the offpulse regions.
+def _get_contiguous_regions(
+    pairs: Iterable[tuple[np.float_, np.float_]], minima: Iterable[np.float_]
+) -> list[tuple[np.float_, np.float_]]:
+    """Merge together regions which are connected by a common minimum.
 
     Parameters
     ----------
-    onpulse_pairs : `list`
-        A list of pairs of bin indices defining the onpulse.
+    pairs : `Iterable[tuple[np.float_, np.float_]]`
+        A list of pairs defining the inverval of each region.
+    minima : `Iterable[np.float_]`
+        A list of minima to use to connect adjacent regions.
 
     Returns
     -------
-    offpulse_pairs : `list`
-        A list of pairs of bin indices defining the offpulse.
+    new_pairs : `list[tuple[np.float_, np.float_]]`
+        A list of pairs defining the interval of each new region.
     """
-    offpulse_pairs = []
+    flk_pairs = []
+    for pair in pairs:
+        flk_roots = _get_flanking_roots(pair, minima)
+        flk_pairs.append((flk_roots[0][0], flk_roots[-1][1]))
 
-    # Make cycling generators to deal with wrap-around
-    current_pair_gen = itertools.cycle(onpulse_pairs)
-    next_pair_gen = itertools.cycle(onpulse_pairs)
-    next(next_pair_gen)
-
-    # Figure out the off-pulse profile
-    for _ in range(len(onpulse_pairs)):
-        current_pair = next(current_pair_gen)
-        next_pair = next(next_pair_gen)
-        offpulse_pairs.append([current_pair[1], next_pair[0]])
-
-    return offpulse_pairs
+    new_pairs = []
+    new_flk_pairs = []
+    for pair, flk_pair in zip(pairs, flk_pairs, strict=True):
+        if new_pairs and flk_pair[0] == new_flk_pairs[-1][1]:
+            # If the flanking minima are touching
+            new_pairs[-1][1] = pair[1]
+            new_flk_pairs[-1][1] = flk_pair[1]
+        elif new_pairs and flk_pair[1] == new_flk_pairs[0][0]:
+            # If the last element wraps around to the first
+            new_pairs[0][0] = pair[0]
+            new_flk_pairs[0][0] = flk_pair[0]
+        else:
+            new_pairs.append(list(pair))
+            new_flk_pairs.append(list(flk_pair))
+    return [tuple(pair) for pair in new_pairs]
 
 
 def _fill_onpulse_regions(
-    onpulse_pairs: list,
+    onpulse_pairs: list[tuple[np.float_, np.float_]],
     bspl: BSpline,
     noise_est: float,
     sigma_cutoff: float,
-    interval: tuple[float, float],
-) -> list:
+    interval: tuple[np.float_, np.float_],
+) -> list[tuple[np.float_, np.float_]]:
     """Attempts to fill small gaps in the onpulse pairs provided these gaps exceed a set sigma
     threshold (i.e. they resemble real signal.)
 
     Parameters
     ----------
-    onpulse_pairs : `list`
+    onpulse_pairs : `list[tuple[np.float_, np.float_]]`
         A list of pairs of bin indices that mark the onpulse regions of the profile.
     bspl : `BSpline`
         The smoothed profile as a BSpline object.
@@ -804,12 +772,12 @@ def _fill_onpulse_regions(
         The standard deviation of the offpulse noise.
     sigma_cutoff : `float`
         The number of standard deviations above which a signal will be considered real.
-    interval : `tuple[float, float]`
+    interval : `tuple[np.float_, np.float_]`
         The full range of bins that the pairs are a subset of.
 
     Return:
     -------
-    filled_onpulse_pairs : `list`
+    filled_onpulse_pairs : `list[tuple[np.float_, np.float_]]`
         A list of pairs of bin indices that represent the ranges of the filled onpulse regions.
     """
     # Nothing to do if the pairs are of length 1
@@ -863,4 +831,72 @@ def _fill_onpulse_regions(
         # Remove the other pair as it's been absorbed
         del filled_onpulse_pairs[idx_end]
 
-    return filled_onpulse_pairs
+    return [tuple(pair) for pair in filled_onpulse_pairs]
+
+
+def get_profile_mask_from_pairs(
+    nbin: int, bin_pairs: Iterable[tuple[np.int_, np.int_]]
+) -> npt.NDArray[np.bool_]:
+    """Return a profile with the regions defined by the bin_pairs filled with NaNs.
+
+    Parameters
+    ----------
+    nbin : `int`
+        The number of phase bins in the profile.
+    bin_pairs : `Iterable[tuple[np.int_, np.int_]]`
+        A list of pairs of bin indices defining the profile region(s).
+
+    Returns
+    -------
+    mask : `npt.NDArray[np.bool_]`
+        A profile mask that is True between the bin pairs.
+    """
+    assert bin_pairs is not None
+
+    bins = np.arange(nbin, dtype=float)
+    mask = np.full(nbin, False)
+
+    if len(bin_pairs) == 1 and bin_pairs[0][0] == bin_pairs[0][1]:
+        return mask
+
+    for pair in bin_pairs:
+        if pair[0] == pair[1]:
+            continue
+        elif pair[0] < pair[1]:
+            mask = np.logical_or(mask, np.logical_and(bins > pair[0], bins < pair[1]))
+        else:
+            mask = np.logical_or(mask, bins > pair[0])
+            mask = np.logical_or(mask, bins < pair[1])
+    return mask
+
+
+def get_offpulse_from_onpulse(
+    onpulse_pairs: list[tuple[np.int_, np.int_]],
+) -> list[tuple[np.int_, np.int_]]:
+    """Given a list of pairs of bin indices defining the onpulse regions, find the corresponding
+    list of pairs of bin indices defining the offpulse regions.
+
+    Parameters
+    ----------
+    onpulse_pairs : `list[tuple[np.int_, np.int_]]`
+        A list of pairs of bin indices defining the onpulse.
+
+    Returns
+    -------
+    offpulse_pairs : `list[tuple[np.int_, np.int_]]`
+        A list of pairs of bin indices defining the offpulse.
+    """
+    offpulse_pairs = []
+
+    # Make cycling generators to deal with wrap-around
+    current_pair_gen = itertools.cycle(onpulse_pairs)
+    next_pair_gen = itertools.cycle(onpulse_pairs)
+    next(next_pair_gen)
+
+    # Figure out the off-pulse profile
+    for _ in range(len(onpulse_pairs)):
+        current_pair = next(current_pair_gen)
+        next_pair = next(next_pair_gen)
+        offpulse_pairs.append([current_pair[1], next_pair[0]])
+
+    return offpulse_pairs

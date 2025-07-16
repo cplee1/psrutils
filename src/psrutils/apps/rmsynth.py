@@ -89,10 +89,7 @@ def main(
     # needs to be accounted for when accessing the measured values later (e.g. noise_est)
     peak_flux = np.max(cube.profile)
     profile = psrutils.Profile(cube.profile / peak_flux)
-    rv = profile.bootstrap_onpulse_regions()
-    if rv != 0:
-        logger.critical(f"Onpulse bootstrapping failed with code {rv}")
-        exit(rv)
+    profile.bootstrap_onpulse_regions()
 
     if meas_widths:
         peak_fracs = [0.5, 0.1]
@@ -104,7 +101,7 @@ def main(
                 with open(f"{cube.source}_{w_param}.csv", "w") as f:
                     for width in profile._widths[w_param][2]:
                         # Pulse width in bins
-                        f.write(f"{width[1]:.2f}\n")
+                        f.write(f"{width[0][0]:.2f},{width[0][1]:.2f},{width[1]:.2f}\n")
 
     profile.plot_diagnostics(
         savename=f"{cube.source}_profile_diagnostics",
