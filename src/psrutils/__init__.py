@@ -5,6 +5,7 @@ from matplotlib.pyplot import rcParams
 from .cube import *
 from .jit_kernels import *
 from .logger import *
+from .misc import *
 from .plotting import *
 from .polarisation import *
 from .profile import *

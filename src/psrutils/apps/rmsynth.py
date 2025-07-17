@@ -1,4 +1,3 @@
-import builtins
 import logging
 import warnings
 from typing import Any
@@ -11,41 +10,6 @@ from requests.exceptions import HTTPError
 import psrutils
 
 logger = logging.getLogger(__name__)
-
-
-def pythonise(input: Any) -> Any:
-    """Convert numpy types to builtin types using recursion.
-
-    Parameters
-    ----------
-    input : `Any`
-        A number, iterator, or dictionary.
-
-    Returns
-    -------
-    output: `Any`
-        A number, iterator, or dictionary containing only builtin types.
-    """
-    match type(input):
-        case np.bool_:
-            output = bool(input)
-        case np.int_:
-            output = int(input)
-        case np.float_:
-            output = float(input)
-        case np.str_:
-            output = str(input)
-        case builtins.tuple:
-            output = tuple(pythonise(item) for item in input)
-        case builtins.list:
-            output = [pythonise(item) for item in input]
-        case builtins.dict:
-            output = {key: pythonise(val) for (key, val) in input.items()}
-        case np.ndarray:
-            output = pythonise(input.tolist())
-        case _:
-            output = input
-    return output
 
 
 @click.command()
@@ -335,4 +299,4 @@ def main(
 
     logger.info(f"Saving results: {cube.source}_rm_results.toml")
     with open(f"{cube.source}_rm_results.toml", "w") as f:
-        rtoml.dump(pythonise(results), f)
+        rtoml.dump(psrutils.pythonise(results), f)
