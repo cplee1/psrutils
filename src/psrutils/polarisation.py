@@ -167,7 +167,7 @@ def compute_sigma_pa_table(
         sigma_pa_table[1, ii] = np.interp(0.6826, integral_table, sigma_pa_range)
 
     if make_plot:
-        fig, ax = plt.subplots(dpi=300, tight_layout=True)
+        fig, ax = plt.subplots(tight_layout=True)
         ax.errorbar(sigma_pa_table[0], sigma_pa_table[1], fmt="k-", ms=1)
         logger.info(f"Saving file: {savename}.png")
         fig.savefig(f"{savename}.png")

@@ -14,6 +14,7 @@ import psrutils
 
 __all__ = [
     "centre_offset_degrees",
+    "format_ticks",
     "add_profile_to_axes",
     "plot_profile",
     "plot_pol_profile",
@@ -29,6 +30,14 @@ logger = logging.getLogger(__name__)
 
 def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
     return phase_bins * 360 - 180
+
+
+def format_ticks(ax: Axes) -> None:
+    ax.minorticks_on()
+    ax.tick_params(which="both", right=True, top=True)
+    ax.tick_params(axis="both", which="both", direction="in")
+    ax.tick_params(axis="both", which="major", length=4)
+    ax.tick_params(axis="both", which="minor", length=2)
 
 
 def add_profile_to_axes(
@@ -143,7 +152,7 @@ def plot_profile(
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
-    fig, ax = plt.subplots(dpi=300, tight_layout=True)
+    fig, ax = plt.subplots(tight_layout=True)
 
     bins = np.arange(cube.num_bin) / (cube.num_bin - 1)
 
@@ -224,21 +233,21 @@ def plot_pol_profile(
 
     # Define Figure and Axes
     if plot_rm and delta_vi is not None:
-        fig = plt.figure(figsize=(6, 6.5), layout="tight", dpi=300)
+        fig = plt.figure(figsize=(6, 6.5), layout="tight")
         gs = gridspec.GridSpec(ncols=1, nrows=4, figure=fig, height_ratios=(1, 1, 1, 3), hspace=0)
         ax_rm = fig.add_subplot(gs[0])
         ax_dv = fig.add_subplot(gs[1])
         ax_pa = fig.add_subplot(gs[2])
         ax_prof = fig.add_subplot(gs[3])
     elif plot_rm:
-        fig = plt.figure(figsize=(6, 5.6), layout="tight", dpi=300)
+        fig = plt.figure(figsize=(6, 5.6), layout="tight")
         gs = gridspec.GridSpec(ncols=1, nrows=3, figure=fig, height_ratios=(1, 1, 3), hspace=0)
         ax_rm = fig.add_subplot(gs[0])
         ax_dv = None
         ax_pa = fig.add_subplot(gs[1])
         ax_prof = fig.add_subplot(gs[2])
     else:
-        fig = plt.figure(figsize=(5, 4), layout="tight", dpi=300)
+        fig = plt.figure(figsize=(5, 4), layout="tight")
         gs = gridspec.GridSpec(ncols=1, nrows=2, figure=fig, height_ratios=(1, 2), hspace=0)
         ax_rm = None
         ax_dv = None
@@ -434,7 +443,7 @@ def plot_freq_phase(
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
-    fig, ax = plt.subplots(dpi=300, tight_layout=True)
+    fig, ax = plt.subplots(tight_layout=True)
 
     ax.imshow(
         cube.subbands[pol],
@@ -475,7 +484,7 @@ def plot_time_phase(
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
 
-    fig, ax = plt.subplots(dpi=300, tight_layout=True)
+    fig, ax = plt.subplots(tight_layout=True)
 
     ax.imshow(
         cube.subints[:, pol, :],
@@ -593,7 +602,7 @@ def plot_2d_fdf(
 
     # Define Figure and Axes
     if plot_pa:
-        fig = plt.figure(figsize=(6, 6.5), layout="tight", dpi=300)
+        fig = plt.figure(figsize=(6, 6.5), layout="tight")
         gs = gridspec.GridSpec(
             ncols=2,
             nrows=3,
@@ -605,7 +614,7 @@ def plot_2d_fdf(
         )
         ax_pa = fig.add_subplot(gs[2, 0])
     else:
-        fig = plt.figure(figsize=(5.4, 4.95), layout="tight", dpi=300)
+        fig = plt.figure(figsize=(5.4, 4.95), layout="tight")
         gs = gridspec.GridSpec(
             ncols=2,
             nrows=2,
@@ -844,7 +853,7 @@ def plot_rm_hist(
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
     """
-    fig, ax = plt.subplots(figsize=(4.5, 4), dpi=300, tight_layout=True)
+    fig, ax = plt.subplots(figsize=(4.5, 4), tight_layout=True)
     hist(samples, bins="knuth", ax=ax, histtype="stepfilled", density=True)
     main_ax = ax
     main_samples = samples
@@ -902,7 +911,7 @@ def plot_rm_vs_phi(
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
     """
-    fig, ax = plt.subplots(dpi=300, tight_layout=True)
+    fig, ax = plt.subplots(tight_layout=True)
     ax.boxplot(rm_phi_samples.T, showfliers=False)
 
     xlims = ax.get_xlim()

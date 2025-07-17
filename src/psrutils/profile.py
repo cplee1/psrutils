@@ -485,7 +485,7 @@ class Profile(object):
             The name of the output plot, excluding extension. Default: "profile_diagnostics".
         """
         # Create figure and axes
-        fig = plt.figure(layout="constrained", figsize=(10, 7), dpi=250)
+        fig = plt.figure(layout="constrained", figsize=(10, 7))
 
         gs = gridspec.GridSpec(3, 2, width_ratios=[2, 1], figure=fig)
 
