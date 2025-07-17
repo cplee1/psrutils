@@ -1,7 +1,13 @@
+import logging
+
+import numpy as np
+import numpy.typing as npt
 import psrchive
 from scipy.constants import speed_of_light
 
 __all__ = ["StokesCube"]
+
+logger = logging.getLogger(__name__)
 
 
 class StokesCube(object):
@@ -15,7 +21,7 @@ class StokesCube(object):
         fscrunch: int | None = None,
         bscrunch: int | None = None,
         rotate_phase: float | None = None,
-    ):
+    ) -> None:
         """Create a StokesCube instance from a PSRCHIVE archive.
 
         Parameters
@@ -47,20 +53,20 @@ class StokesCube(object):
             try:
                 self._archive.convert_state("Stokes")
             except RuntimeError:
-                print("Could not convert to Stokes.")
+                logger.error("Could not convert to Stokes.")
 
         # Ensure the archive is dedispersed
         if not self._archive.get_dedispersed():
             try:
                 self._archive.dedisperse()
             except RuntimeError:
-                print("Could not dedisperse archive.")
+                logger.error("Could not dedisperse archive.")
 
         # Must remove the baseline before downsampling
         try:
             self._archive.remove_baseline()
         except RuntimeError:
-            print("Could not remove baseline from archive.")
+            logger.error("Could not remove baseline from archive.")
 
         # Downsample
         if type(tscrunch) is int:
@@ -78,33 +84,33 @@ class StokesCube(object):
             self._archive.rotate_phase(rotate_phase)
 
     @property
-    def ctr_freq(self):
+    def ctr_freq(self) -> float:
         """Centre frequency in MHz."""
         return self._archive.get_centre_frequency()
 
     @property
-    def min_freq(self):
+    def min_freq(self) -> float:
         """Lower edge frequency in MHz."""
         return self._archive.get_centre_frequency() - abs(self._archive.get_bandwidth()) / 2.0
 
     @property
-    def max_freq(self):
+    def max_freq(self) -> float:
         """Upper edge frequency in MHz."""
         return self._archive.get_centre_frequency() + abs(self._archive.get_bandwidth()) / 2.0
 
     @property
-    def freqs(self):
+    def freqs(self) -> npt.NDArray[np.float_]:
         """The centre frequencies of all subbands in MHz."""
         return self._archive.get_frequencies() * 1e6
 
     @property
-    def lambda_sq(self):
+    def lambda_sq(self) -> npt.NDArray[np.float_]:
         """The squared centre wavelengths of all subbands in m^2."""
         freqs = self._archive.get_frequencies() * 1e6
         return (speed_of_light / freqs) ** 2
 
     @property
-    def int_time(self):
+    def int_time(self) -> float:
         """Total integration time in seconds."""
         start_time = self._archive.get_first_Integration().get_start_time()
         end_time = self._archive.get_last_Integration().get_end_time()
@@ -112,51 +118,61 @@ class StokesCube(object):
         return int_time.in_seconds()
 
     @property
-    def num_subint(self):
+    def start_mjd(self) -> float:
+        """Start time in MJD."""
+        return self._archive.get_first_Integration().get_start_time().in_days()
+
+    @property
+    def end_mjd(self) -> float:
+        """End time in MJD."""
+        return self._archive.get_last_Integration().get_end_time().in_days()
+
+    @property
+    def num_subint(self) -> int:
         """The number of subintegration in the archive."""
         return self._archive.get_nsubint()
 
     @property
-    def num_subband(self):
+    def num_subband(self) -> int:
         """The number of frequency subbands in the archive."""
         return self._archive.get_nchan()
 
     @property
-    def num_bin(self):
+    def num_bin(self) -> int:
         """The number of phase bins in the archive."""
         return self._archive.get_nbin()
 
     @property
-    def num_pol(self):
+    def num_pol(self) -> int:
         """The number of instrumental polarisations."""
         return self._archive.get_npol()
 
     @property
-    def archive(self):
+    def archive(self) -> psrchive.Archive:
         """A reference to the stored PSRCHIVE archive object."""
         return self._archive
 
     @property
-    def archive_clone(self):
+    def archive_clone(self) -> psrchive.Archive:
         """A clone of the stored PSRCHIVE archive object."""
         return self._archive.clone()
 
     @property
-    def subints(self):
+    def subints(self) -> npt.NDArray[np.float32]:
         """Average in frequency. Output has dimensions (time, pol, phase)."""
         tmp_archive = self._archive.clone()
         tmp_archive.fscrunch()
         return tmp_archive.get_data()[:, :, 0, :]
 
     @property
-    def subbands(self):
+    def subbands(self) -> npt.NDArray[np.float32]:
         """Average in time. Output has dimensions (pol, freq, phase)."""
         tmp_archive = self._archive.clone()
         tmp_archive.tscrunch()
         return tmp_archive.get_data()[0, :, :, :]
 
     @property
-    def mean_subband(self):
+    def mean_subband(self) -> npt.NDArray[np.float32]:
         """Average in time and phase. Output has dimensions (pol, freq)."""
         tmp_archive = self._archive.clone()
         tmp_archive.tscrunch()
@@ -164,7 +180,7 @@ class StokesCube(object):
         return tmp_archive.get_data()[0, :, :, 0]
 
     @property
-    def pol_profile(self):
+    def pol_profile(self) -> npt.NDArray[np.float32]:
         """Average in frequency and time. Output has dimensions (pol, phase)."""
         tmp_archive = self._archive.clone()
         tmp_archive.fscrunch()
@@ -172,7 +188,7 @@ class StokesCube(object):
         return tmp_archive.get_data()[0, :, 0, :]
 
     @property
-    def profile(self):
+    def profile(self) -> npt.NDArray[np.float32]:
         """Average in frequency, time, and polarisation. Output is a 1D array."""
         tmp_archive = self._archive.clone()
         tmp_archive.fscrunch()
@@ -181,7 +197,7 @@ class StokesCube(object):
         return tmp_archive.get_data()[0, 0, 0, :]
 
     @property
-    def snr(self):
+    def snr(self) -> float:
         """Get the S/N of the integrated profile."""
         tmp_archive = self._archive.clone()
         tmp_archive.fscrunch()
@@ -191,19 +207,19 @@ class StokesCube(object):
         return prof.snr()
 
     @property
-    def source(self):
+    def source(self) -> str:
         """Get the source name."""
         return self._archive.get_source()
 
-    def bscrunch_to_nbin(self, nbin: int):
-        """ "Downsample to nbin phase bins."""
+    def bscrunch_to_nbin(self, nbin: int) -> None:
+        """Downsample to nbin phase bins."""
         self._archive.bscrunch_to_nbin(nbin)
 
-    def rotate_phase(self, phase: float):
+    def rotate_phase(self, phase: float) -> None:
         """Rotate by a fraction of the pulse phase."""
         self._archive.rotate_phase(phase)
 
-    def defaraday(self, rm: float):
+    def defaraday(self, rm: float) -> None:
         """De-Faraday rotate to an RM."""
         self._archive.set_rotation_measure(rm)
 
