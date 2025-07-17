@@ -171,7 +171,8 @@ def main(
         rm_phi_qty = (rm_phi_meas, rm_phi_unc)
         peak_mask = np.where(rm_phi_unc < rm_stats["rmsf_fwhm"] / 2, True, False)
         if save_phase_resolved:
-            results["RM_phi"] = [meas for meas in zip(rm_phi_meas, rm_phi_unc, strict=False)]
+            results["RM_phi"] = rm_phi_meas
+            results["RM_phi_unc"] = rm_phi_unc
 
         if boxplot:
             psrutils.plotting.plot_rm_vs_phi(
@@ -190,7 +191,8 @@ def main(
             rm_prof_meas = np.mean(rm_prof_samples_valid)
             rm_prof_unc = np.std(rm_prof_samples_valid)
             rm_prof_qty = (rm_prof_meas, rm_prof_unc)
-            results["RM_prof"] = (rm_prof_meas, rm_prof_unc)
+            results["RM_prof"] = rm_prof_meas
+            results["RM_prof_unc"] = rm_prof_unc
 
             psrutils.plotting.plot_rm_hist(
                 rm_prof_samples,
@@ -206,7 +208,8 @@ def main(
         if meas_rm_scat:
             rm_scat_meas = np.mean(rm_scat_samples)
             rm_scat_unc = np.std(rm_scat_samples)
-            results["RM_scat"] = (rm_scat_meas, rm_scat_unc)
+            results["RM_scat"] = rm_scat_meas
+            results["RM_scat_unc"] = rm_scat_unc
 
             psrutils.plotting.plot_rm_hist(
                 rm_scat_samples,
@@ -218,7 +221,7 @@ def main(
         rm_phi_qty = (rm_phi_samples, None)
         if meas_rm_prof:
             rm_prof_qty = (rm_prof_samples, None)
-            results["RM_prof"] = (rm_prof_samples, None)
+            results["RM_prof"] = rm_prof_samples
         else:
             rm_prof_qty = None
         peak_mask = None
@@ -284,16 +287,18 @@ def main(
             rm_iono, rm_iono_err = psrutils.get_rm_iono(
                 cube, bootstrap_nsamp=int(1e4), savename=f"{cube.source}_rm_iono"
             )
-            results["RM_iono"] = (rm_iono, rm_iono_err)
+            results["RM_iono"] = rm_iono
+            results["RM_iono_unc"] = rm_iono_err
 
             if meas_rm_prof:
-                rm_obs, rm_obs_err = results["RM_prof"]
+                rm_obs, rm_obs_err = rm_prof_qty
                 rm_ism = rm_obs - rm_iono
                 if rm_obs_err is not None:
                     rm_ism_err = np.sqrt(rm_obs_err**2 + rm_iono_err**2)
                 else:
                     rm_ism_err = rm_iono_err
-                results["RM_prof_ISM"] = (rm_ism, rm_ism_err)
+                results["RM_prof_ISM"] = rm_ism
+                results["RM_prof_ISM_unc"] = rm_ism_err
         except HTTPError as e:
             logger.error(e)
 
