@@ -15,7 +15,7 @@ import psrutils
 @click.option("-c", "ncols", type=int, help="Number of columns.")
 @click.option("-r", "nrows", type=int, help="Number of rows.")
 def main(archives: tuple, bscr: int, ncols: int, nrows: int) -> None:
-    psrutils.setup_logger()
+    psrutils.setup_logger("psrutils")
 
     if ncols * nrows < len(archives):
         raise ValueError("To few subplots for the provided archives.")

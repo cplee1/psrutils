@@ -29,7 +29,7 @@ def main(
     plot_ctrline: bool,
     plot_pol: bool,
 ) -> None:
-    psrutils.setup_logger()
+    psrutils.setup_logger("psrutils")
 
     if ncols * nrows < len(spec_files):
         raise ValueError("To few subplots for the provided archives.")

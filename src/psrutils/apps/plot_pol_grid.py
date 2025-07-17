@@ -267,7 +267,7 @@ def make_figure(
 def main(
     csvfiles: tuple, ncols: int, nrows: int, colsize: float, rowsize: float, p0_cutoff: float
 ) -> None:
-    psrutils.setup_logger()
+    psrutils.setup_logger("psrutils")
 
     # Filter out bad detections
     best_csvfiles = []

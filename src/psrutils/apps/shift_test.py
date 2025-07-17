@@ -10,7 +10,7 @@ import psrutils
 @click.help_option("-h", "--help")
 @click.version_option(psrutils.__version__, "-V", "--version")
 def main(spec_file: str) -> None:
-    psrutils.setup_logger()
+    psrutils.setup_logger("psrutils")
 
     spec = np.loadtxt(spec_file, dtype=str, delimiter=",")
     if spec.ndim == 1:

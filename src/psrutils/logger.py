@@ -11,7 +11,7 @@ log_levels = dict(
 )
 
 
-def setup_logger(name: str = "psrutils", log_level: str | int = "INFO") -> None:
+def setup_logger(name: str | None = None, log_level: str | int = "INFO") -> None:
     if type(log_level) is str:
         # Convert from str to int representation
         log_level = log_levels.get(log_level.upper())
