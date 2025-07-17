@@ -11,18 +11,25 @@ log_levels = dict(
 )
 
 
-def setup_logger(name: str = "psrutils", log_level: str = "INFO") -> None:
+def setup_logger(name: str = "psrutils", log_level: str | int = "INFO") -> None:
+    if type(log_level) is str:
+        # Convert from str to int representation
+        log_level = log_levels.get(log_level.upper())
+
     # Get the logger
     logger = logging.getLogger(name)
 
+    # Remove any previous handlers
+    logger.handlers.clear()
+
     # Set the verbosity level of the logger
-    logger.setLevel(log_levels.get(log_level))
+    logger.setLevel(log_level)
 
     # Get channel handler
     ch = logging.StreamHandler()
 
     # Set the verbosity level of ch
-    ch.setLevel(log_levels.get(log_level))
+    ch.setLevel(log_level)
 
     # Set the formatter of ch
     formatter = logging.Formatter(
