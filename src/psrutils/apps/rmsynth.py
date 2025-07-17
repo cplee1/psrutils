@@ -56,23 +56,38 @@ def pythonise(input: Any) -> Any:
     "-L",
     "log_level",
     type=click.Choice(psrutils.log_levels.keys(), case_sensitive=False),
-    default="INFO",
+    default="info",
+    show_default=True,
     help="The logger verbosity level.",
 )
 @click.option("-f", "fscr", type=int, help="Fscrunch to this number of channels.")
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
 @click.option("-c", "centre", is_flag=True, help="Centre the pulse.")
-@click.option("--rmlim", type=float, default=100.0, help="RM limit.")
-@click.option("--rmres", type=float, default=0.1, help="RM resolution.")
-@click.option("-n", "nsamp", type=int, help="The number of bootstrap samples.")
-@click.option("--p0_cutoff", type=float, default=3.0, help="Mask below this L/sigma_I value.")
+@click.option("--rmlim", type=float, default=100.0, show_default=True, help="RM limit.")
+@click.option("--rmres", type=float, default=0.1, show_default=True, help="RM resolution.")
+@click.option(
+    "-n", "nsamp", type=int, help="The number of bootstrap samples. By default, will not bootstrap."
+)
+@click.option(
+    "--p0_cutoff",
+    type=float,
+    default=3.0,
+    show_default=True,
+    help="Mask below this L/sigma_I value.",
+)
 @click.option("--phi_plotlim", type=float, nargs=2, help="Plot limits in rad/m^2.")
 @click.option("--phase_plotlim", type=float, nargs=2, help="Plot limits in rotations.")
 @click.option(
     "--discard", type=float, nargs=2, help="Discard RM samples outside this range in rad/m^2."
 )
-@click.option("--clean_cutoff", type=float, default=3.0, help="RM-CLEAN component S/N cutoff.")
+@click.option(
+    "--clean_cutoff",
+    type=float,
+    default=3.0,
+    show_default=True,
+    help="RM-CLEAN component S/N cutoff.",
+)
 @click.option("--meas_rm_prof", is_flag=True, help="Measure RM_prof.")
 @click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
 @click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
@@ -84,7 +99,7 @@ def pythonise(input: Any) -> Any:
 @click.option("--plot_onpulse", is_flag=True, help="Shade the on-pulse region.")
 @click.option("--plot_pa", is_flag=True, help="Plot the position angle.")
 @click.option("--plot_pol_prof", is_flag=True, help="Plot the full polarisation profile.")
-@click.option("--save_pdf", is_flag=True, help="Save as a PDF.")
+@click.option("--save_pdf", is_flag=True, help="Save plots in PDF format.")
 @click.option("--save_phase_resolved", is_flag=True, help="Save phase-resolved measurements.")
 @click.option("-d", "dark_mode", is_flag=True, help="Use a dark background.")
 def main(
