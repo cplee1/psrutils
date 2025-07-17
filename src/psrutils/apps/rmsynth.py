@@ -6,6 +6,7 @@ from typing import Any
 import click
 import numpy as np
 import rtoml
+from requests.exceptions import HTTPError
 
 import psrutils
 
@@ -300,19 +301,22 @@ def main(
 
     if get_rm_iono:
         psrutils.setup_logger("spinifex", log_level)
-        rm_iono, rm_iono_err = psrutils.get_rm_iono(
-            cube, bootstrap_nsamp=int(1e4), savename=f"{cube.source}_rm_iono"
-        )
-        results["RM_iono"] = (rm_iono, rm_iono_err)
+        try:
+            rm_iono, rm_iono_err = psrutils.get_rm_iono(
+                cube, bootstrap_nsamp=int(1e4), savename=f"{cube.source}_rm_iono"
+            )
+            results["RM_iono"] = (rm_iono, rm_iono_err)
 
-        if meas_rm_prof:
-            rm_obs, rm_obs_err = results["RM_prof"]
-            rm_ism = rm_obs - rm_iono
-            if rm_obs_err is not None:
-                rm_ism_err = np.sqrt(rm_obs_err**2 + rm_iono_err**2)
-            else:
-                rm_ism_err = rm_iono_err
-            results["RM_prof_ISM"] = (rm_ism, rm_ism_err)
+            if meas_rm_prof:
+                rm_obs, rm_obs_err = results["RM_prof"]
+                rm_ism = rm_obs - rm_iono
+                if rm_obs_err is not None:
+                    rm_ism_err = np.sqrt(rm_obs_err**2 + rm_iono_err**2)
+                else:
+                    rm_ism_err = rm_iono_err
+                results["RM_prof_ISM"] = (rm_ism, rm_ism_err)
+        except HTTPError as e:
+            logger.error(e)
 
     logger.info(f"Saving results: {cube.source}_rm_results.toml")
     with open(f"{cube.source}_rm_results.toml", "w") as f:
