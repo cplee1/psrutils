@@ -57,65 +57,59 @@ class Profile(object):
     @property
     def ppoly(self) -> PPoly:
         """The spline fit to the pulse profile as a PPoly object."""
-        if not self._ppoly:
+        if not hasattr(self, "_ppoly") or self._ppoly is None:
             raise AttributeError("The spline fit has not been computed")
         return self._ppoly
 
     @property
     def noise_est(self) -> np.float_:
         """An estimate of the standard deviation of the offpulse noise."""
-        if not self._noise_est:
+        if not hasattr(self, "_noise_est") or self._noise_est is None:
             self.get_simple_noise_est()
         return self._noise_est
 
     @property
     def underest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
         """A list of pairs of bin indices defining the underestimated onpulse region(s)."""
-        if not self._underest_onpulse_pairs:
+        if not hasattr(self, "_underest_onpulse_pairs") or self._underest_onpulse_pairs is None:
             raise AttributeError("Onpulse has not been computed")
         return self._underest_onpulse_pairs
 
     @property
     def overest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
         """A list of pairs of bin indices defining the overestimated onpulse region(s)."""
-        if not self._overest_onpulse_pairs:
+        if not hasattr(self, "_overest_onpulse_pairs") or self._overest_onpulse_pairs is None:
             raise AttributeError("Onpulse has not been computed")
         return self._overest_onpulse_pairs
 
     @property
     def offpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
         """A list of pairs of bin indices defining the offpulse region(s)."""
-        if not self._offpulse_pairs:
+        if not hasattr(self, "_offpulse_pairs") or self._offpulse_pairs is None:
             raise AttributeError("Offpulse has not been computed")
         return self._offpulse_pairs
 
     @property
     def underest_onpulse_bins(self) -> npt.NDArray[np.int_]:
         """An array of bins in the underestimated onpulse region(s)."""
-        if not self._underest_onpulse_pairs:
+        if not hasattr(self, "_underest_onpulse_pairs") or self._underest_onpulse_pairs is None:
             raise AttributeError("Onpulse has not been computed")
-        if self._underest_onpulse_pairs is None:
-            return None
         mask = get_profile_mask_from_pairs(self._nbin, self._underest_onpulse_pairs)
         return self._bins[mask]
 
     @property
     def overest_onpulse_bins(self) -> npt.NDArray[np.int_]:
         """An array of bins in the overestimated onpulse region(s)."""
-        if not self._overest_onpulse_pairs:
+        if not hasattr(self, "_overest_onpulse_pairs") or self._overest_onpulse_pairs is None:
             raise AttributeError("Onpulse has not been computed")
-        if self._overest_onpulse_pairs is None:
-            return None
         mask = get_profile_mask_from_pairs(self._nbin, self._overest_onpulse_pairs)
         return self._bins[mask]
 
     @property
     def offpulse_bins(self) -> npt.NDArray[np.int_]:
         """An array of bins in the offpulse region(s)."""
-        if not self._offpulse_pairs:
+        if not hasattr(self, "_offpulse_pairs") or self._offpulse_pairs is None:
             raise AttributeError("Offpulse has not been computed")
-        if self._offpulse_pairs is None:
-            return None
         mask = get_profile_mask_from_pairs(self._nbin, self._offpulse_pairs)
         return self._bins[mask]
 
