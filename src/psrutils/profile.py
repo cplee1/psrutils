@@ -55,6 +55,11 @@ class Profile(object):
         return self._bins
 
     @property
+    def phases(self) -> npt.NDArray[np.float_]:
+        """An array of bin phases."""
+        return self._bins / (self._nbin - 1)
+
+    @property
     def ppoly(self) -> PPoly:
         """The spline fit to the pulse profile as a PPoly object."""
         if not hasattr(self, "_ppoly") or self._ppoly is None:
