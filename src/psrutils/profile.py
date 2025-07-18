@@ -328,7 +328,7 @@ class Profile(object):
         underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
             old_noise_est, sigma_cutoff=sigma_cutoff
         )
-        if not overest_onpp or not underest_onpp:
+        if overest_onpp is None or underest_onpp is None:
             raise RuntimeError("Bootstrapping failed on initial run")
 
         old_offpp = get_offpulse_from_onpulse(overest_onpp)
@@ -367,7 +367,7 @@ class Profile(object):
             underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
                 new_noise_est, sigma_cutoff=sigma_cutoff
             )
-            if not overest_onpp or not underest_onpp:
+            if overest_onpp is None or underest_onpp is None:
                 # Roll back the spline attributes to the previous fit
                 logger.warning(f"Bootstrapping failed on trial {trial}")
                 self.fit_spline(old_noise_est)
@@ -524,7 +524,7 @@ class Profile(object):
         yrangeLB = axLB.get_ylim()
 
         # Onpulse estimates
-        if self._overest_onpulse_pairs is not None:
+        if hasattr(self, "_overest_onpulse_pairs") and self._overest_onpulse_pairs is not None:
             underest_args = dict(color="tab:blue", alpha=0.2, hatch="///", zorder=0.1)
             overest_args = dict(color="tab:blue", edgecolor=None, alpha=0.2, zorder=0)
             for pairlist, args, flag in zip(
@@ -547,7 +547,7 @@ class Profile(object):
 
         # Pulse widths
         w_info_lines = []
-        if self._widths is not None:
+        if hasattr(self, "_widths") and self._widths is not None:
             w_kwargs = dict(
                 color="tab:red", marker=".", markersize=5, linestyle=":", linewidth=lw, alpha=1.0
             )
@@ -577,7 +577,7 @@ class Profile(object):
         axRM.stairs(*hb, color="tab:blue", label=f"all: {p=:.3f}", alpha=0.4, **stairs_kwargs)
 
         noff = 0
-        if self._offpulse_pairs is not None:
+        if hasattr(self, "_offpulse_pairs") and self._offpulse_pairs is not None:
             mask = get_profile_mask_from_pairs(self._nbin, self._offpulse_pairs)
             if not np.all(np.logical_not(mask)):
                 noff = len(self._prof[mask])
