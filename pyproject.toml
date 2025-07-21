@@ -25,11 +25,6 @@ dependencies = [
 
 [project.scripts]
 pu-plot = "psrutils.apps.plot:main"
-pu-plot-grid = "psrutils.apps.plot_grid:main"
-pu-plot-pol-grid = "psrutils.apps.plot_pol_grid:main"
-pu-plot-stack = "psrutils.apps.plot_stack:main"
-pu-plot-compare = "psrutils.apps.plot_compare:main"
-pu-shift-test = "psrutils.apps.shift_test:main"
 pu-rmsynth = "psrutils.apps.rmsynth:main"
 
 [build-system]
