@@ -3,7 +3,7 @@ from importlib.metadata import version
 from matplotlib.pyplot import rcParams
 
 from .cube import *
-from .jit_kernels import *
+from .kernels import *
 from .logger import *
 from .misc import *
 from .plotting import *
