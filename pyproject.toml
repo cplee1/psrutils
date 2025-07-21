@@ -13,7 +13,7 @@ dependencies = [
     "cmasher",
     "matplotlib",
     "numba",
-    "numpy",
+    "numpy<2",
     "scipy",
     "psrqpy",
     "ruff",
