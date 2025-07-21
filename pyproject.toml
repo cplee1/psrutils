@@ -55,14 +55,19 @@ select = [
     # isort
     "I",
 ]
-ignore = [
-    # Ignore unused imports
-    "F401",
-    # Ignore wildcard imports
-    "F403",
-]
+
+[tool.ruff.lint.per-file-ignores]
+# Ignore wildcard imports in init files
+"__init__.py" = ["F403"]
+# Ignore unused imports due to cmasher
+"plotting.py" = ["F401"]
 
 [tool.ruff.format]
+# Use double quotes for strings
 quote-style = "double"
+# Indent with spaces, rather than tabs
 indent-style = "space"
+# Respect magic trailing commas
+skip-magic-trailing-comma = false
+# Automatically detect the appropriate line ending
 line-ending = "auto"
