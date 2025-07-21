@@ -9,6 +9,7 @@ import numpy as np
 import scipy.stats as st
 from astropy.visualization import hist
 from matplotlib.axes import Axes
+from numpy.typing import NDArray
 
 import psrutils
 
@@ -28,7 +29,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-def centre_offset_degrees(phase_bins: np.ndarray) -> np.ndarray:
+def centre_offset_degrees(phase_bins: NDArray) -> NDArray:
     return phase_bins * 360 - 180
 
 
@@ -54,9 +55,9 @@ def add_profile_to_axes(
     V_colour: str = "tab:blue",
     PA_colour: str = "k",
     alpha: float = 1.0,
-    bin_func: Callable[[np.ndarray], np.ndarray] | None = None,
-    label: str = None,
-) -> tuple[np.ndarray, tuple]:
+    bin_func: Callable[[NDArray], NDArray] | None = None,
+    label: str | None = None,
+) -> tuple[NDArray, tuple]:
     if plot_pol:
         profile_data = psrutils.get_bias_corrected_pol_profile(cube)
         iquv_prof, l_prof, pa, p0_l, p0_v, sigma_i = profile_data
@@ -134,7 +135,10 @@ def add_profile_to_axes(
 
 
 def plot_profile(
-    cube: psrutils.StokesCube, pol: int = 0, savename: str = "profile", save_pdf: bool = False
+    cube: psrutils.StokesCube,
+    pol: int = 0,
+    savename: str = "profile",
+    save_pdf: bool = False,
 ) -> None:
     """Create a plot of integrated flux density vs phase for a specified polarisation.
 
@@ -176,10 +180,10 @@ def plot_profile(
 def plot_pol_profile(
     cube: psrutils.StokesCube,
     rmsf_fwhm: float | None = None,
-    rm_phi_qty: tuple[np.ndarray, np.ndarray] | None = None,
+    rm_phi_qty: tuple[NDArray, NDArray] | None = None,
     rm_prof_qty: tuple[float, float] | None = None,
-    rm_mask: np.ndarray | None = None,
-    delta_vi: np.ndarray | None = None,
+    rm_mask: NDArray | None = None,
+    delta_vi: NDArray | None = None,
     phase_range: tuple[float, float] | None = None,
     p0_cutoff: float | None = 3.0,
     savename: str = "pol_profile",
@@ -194,14 +198,14 @@ def plot_pol_profile(
         A StokesCube object.
     rmsf_fwhm : `float`, optional
         The FWHM of the RM spread function. Default: `None`.
-    rm_phi_qty : `tuple[np.ndarray, np.ndarray]`, optional
+    rm_phi_qty : `tuple[NDArray, NDArray]`, optional
         The RM measurements and uncertainties for each phase bin. Default: `None`.
     rm_prof_qty : `tuple[float, float]`, optional
         The RM measurement and uncertainty for the profile. Default: `None`.
-    rm_mask : `np.ndarray`, optional
+    rm_mask : `NDArray`, optional
         An array of booleans to act as a mask for the measured RM values.
         Default: `None`.
-    delta_vi : `np.ndarray`, optional
+    delta_vi : `NDArray`, optional
         The change in Stokes V/I over the bandwidth per bin. Default: `None`.
     phase_range : `tuple[float, float]`, optional
         The phase range in rotations. Default: [0, 1].
@@ -234,21 +238,27 @@ def plot_pol_profile(
     # Define Figure and Axes
     if plot_rm and delta_vi is not None:
         fig = plt.figure(figsize=(6, 6.5), layout="tight")
-        gs = gridspec.GridSpec(ncols=1, nrows=4, figure=fig, height_ratios=(1, 1, 1, 3), hspace=0)
+        gs = gridspec.GridSpec(
+            ncols=1, nrows=4, figure=fig, height_ratios=(1, 1, 1, 3), hspace=0
+        )
         ax_rm = fig.add_subplot(gs[0])
         ax_dv = fig.add_subplot(gs[1])
         ax_pa = fig.add_subplot(gs[2])
         ax_prof = fig.add_subplot(gs[3])
     elif plot_rm:
         fig = plt.figure(figsize=(6, 5.6), layout="tight")
-        gs = gridspec.GridSpec(ncols=1, nrows=3, figure=fig, height_ratios=(1, 1, 3), hspace=0)
+        gs = gridspec.GridSpec(
+            ncols=1, nrows=3, figure=fig, height_ratios=(1, 1, 3), hspace=0
+        )
         ax_rm = fig.add_subplot(gs[0])
         ax_dv = None
         ax_pa = fig.add_subplot(gs[1])
         ax_prof = fig.add_subplot(gs[2])
     else:
         fig = plt.figure(figsize=(5, 4), layout="tight")
-        gs = gridspec.GridSpec(ncols=1, nrows=2, figure=fig, height_ratios=(1, 2), hspace=0)
+        gs = gridspec.GridSpec(
+            ncols=1, nrows=2, figure=fig, height_ratios=(1, 2), hspace=0
+        )
         ax_rm = None
         ax_dv = None
         ax_pa = fig.add_subplot(gs[0])
@@ -294,7 +304,10 @@ def plot_pol_profile(
             scatter_params["marker"] = "o"
 
         ax_rm.errorbar(
-            x=bins[full_rm_mask], y=rm_phi_qty[0][full_rm_mask], yerr=rm_phi_unc, **scatter_params
+            x=bins[full_rm_mask],
+            y=rm_phi_qty[0][full_rm_mask],
+            yerr=rm_phi_unc,
+            **scatter_params,
         )
 
         rm_lims = ax_rm.get_ylim()
@@ -304,18 +317,28 @@ def plot_pol_profile(
             if rm_prof_qty[1] is not None:
                 y1 = [rm_prof_qty[0] - rm_prof_qty[1]] * 2
                 y2 = [rm_prof_qty[0] + rm_prof_qty[1]] * 2
-                ax_rm.fill_between(phase_range, y1, y2, color="tab:red", alpha=0.5, zorder=0)
+                ax_rm.fill_between(
+                    phase_range, y1, y2, color="tab:red", alpha=0.5, zorder=0
+                )
             else:
                 ax_rm.axhline(
-                    y=rm_prof_qty[0], linestyle="--", color="tab:red", linewidth=lw, zorder=1
+                    y=rm_prof_qty[0],
+                    linestyle="--",
+                    color="tab:red",
+                    linewidth=lw,
+                    zorder=1,
                 )
 
             # Plot RM=0 + uncertainty region
             if rmsf_fwhm is not None:
                 y1 = [0 - rmsf_fwhm / 2.0] * 2
                 y2 = [0 + rmsf_fwhm / 2.0] * 2
-                ax_rm.fill_between(phase_range, y1, y2, color=line_col, alpha=0.2, zorder=0)
-                ax_rm.axhline(y=0, linestyle=":", color=line_col, linewidth=lw, zorder=1)
+                ax_rm.fill_between(
+                    phase_range, y1, y2, color=line_col, alpha=0.2, zorder=0
+                )
+                ax_rm.axhline(
+                    y=0, linestyle=":", color=line_col, linewidth=lw, zorder=1
+                )
 
         ax_rm.set_ylim(rm_lims)
 
@@ -425,7 +448,10 @@ def plot_pol_profile(
 
 
 def plot_freq_phase(
-    cube: psrutils.StokesCube, pol: int = 0, savename: str = "freq_phase", save_pdf: bool = False
+    cube: psrutils.StokesCube,
+    pol: int = 0,
+    savename: str = "freq_phase",
+    save_pdf: bool = False,
 ) -> None:
     """Create a plot of frequency vs phase for a specified polarisation.
 
@@ -466,7 +492,10 @@ def plot_freq_phase(
 
 
 def plot_time_phase(
-    cube: psrutils.StokesCube, pol: int = 0, savename: str = "time_phase", save_pdf: bool = False
+    cube: psrutils.StokesCube,
+    pol: int = 0,
+    savename: str = "time_phase",
+    save_pdf: bool = False,
 ) -> None:
     """Create a plot of time vs phase for a specified polarisation.
 
@@ -508,21 +537,21 @@ def plot_time_phase(
 
 def plot_2d_fdf(
     cube: psrutils.StokesCube,
-    fdf_amp_2D: np.ndarray,
-    phi: np.ndarray,
+    fdf_amp_2D: NDArray,
+    phi: NDArray,
     rmsf_fwhm: float,
     rm_phi_qty: tuple | None = None,
     rm_prof_qty: tuple | None = None,
     onpulse_pairs: list | None = None,
-    rm_mask: np.ndarray | None = None,
-    cln_comps: np.ndarray | None = None,
+    rm_mask: NDArray | None = None,
+    cln_comps: NDArray | None = None,
     plot_peaks: bool = False,
     plot_onpulse: bool = False,
     plot_pa: bool = False,
     phase_range: tuple[float, float] | None = None,
     phi_range: tuple[float, float] | None = None,
     p0_cutoff: float | None = 3.0,
-    bin_func: Callable[[np.ndarray], np.ndarray] | None = None,
+    bin_func: Callable[[NDArray], NDArray] | None = None,
     savename: str = "fdf",
     save_pdf: bool = False,
     dark_mode: bool = False,
@@ -533,23 +562,23 @@ def plot_2d_fdf(
     ----------
     cube : `psrutils.StokesCube`
         A StokesCube object.
-    fdf_amp_2D: `np.ndarray`
+    fdf_amp_2D: `NDArray`
         The amplitude of the FDF, with dimensions (phase, phi).
-    phi : `np.ndarray`
+    phi : `NDArray`
         The Faraday depths (in rad/m^2) which the FDF is computed at.
     rmsf_fwhm : `float`
         The FWHM of the RM spread function.
-    rm_phi_qty : `tuple[np.ndarray, np.ndarray]`, optional
+    rm_phi_qty : `tuple[NDArray, NDArray]`, optional
         The RM measurements and uncertainties for each phase bin. Default: `None`.
     rm_prof_qty : `tuple[float, float]`, optional
         The RM measurement and uncertainty for the profile. Default: `None`.
     onpulse_pairs : `list`, optional
         An list of bin index pairs defining the onpulse region(s). If `None`, will use the
         full phase range. Default: `None`.
-    rm_mask : `np.ndarray`, optional
+    rm_mask : `NDArray`, optional
         An array of booleans to act as a mask for the measured RM values.
         Default: `None`.
-    cln_comps : `np.ndarray`, optional
+    cln_comps : `NDArray`, optional
         RM-CLEAN components to plot. Default: `None`.
     plot_peaks : `bool`, optional
         Plot the measure RM and error bars. Default: `False`.
@@ -576,7 +605,9 @@ def plot_2d_fdf(
     if rm_prof_qty is not None:
         cube.defaraday(rm_prof_qty[0])
 
-    iquv_prof, l_prof, pa_prof, p0_l, _, _ = psrutils.get_bias_corrected_pol_profile(cube)
+    iquv_prof, l_prof, pa_prof, p0_l, _, _ = psrutils.get_bias_corrected_pol_profile(
+        cube
+    )
 
     bins = np.linspace(0, 1, cube.num_bin)
 
@@ -630,8 +661,12 @@ def plot_2d_fdf(
     ax_fdf_2d = fig.add_subplot(gs[1, 0])
 
     # Plot profile
-    ax_prof.plot(bins, iquv_prof[0], linewidth=lw, linestyle="-", color=line_col, zorder=8)
-    ax_prof.plot(bins, iquv_prof[3], linewidth=lw, linestyle=":", color="tab:blue", zorder=9)
+    ax_prof.plot(
+        bins, iquv_prof[0], linewidth=lw, linestyle="-", color=line_col, zorder=8
+    )
+    ax_prof.plot(
+        bins, iquv_prof[3], linewidth=lw, linestyle=":", color="tab:blue", zorder=9
+    )
     ax_prof.plot(bins, l_prof, linewidth=lw, linestyle="--", color="tab:red", zorder=10)
     ax_prof.text(
         0.03,
@@ -680,11 +715,19 @@ def plot_2d_fdf(
             y2 = [rm_prof_qty[0] + rm_prof_qty[1]] * 2
             ax_fdf_1dy.fill_between(xlims, y1, y2, color="tab:red", alpha=0.5, zorder=0)
             ax_fdf_1dy.axhline(
-                y=rm_prof_qty[0], linestyle="--", color="tab:red", linewidth=lw, zorder=1
+                y=rm_prof_qty[0],
+                linestyle="--",
+                color="tab:red",
+                linewidth=lw,
+                zorder=1,
             )
         else:
             ax_fdf_1dy.axhline(
-                y=rm_prof_qty[0], linestyle="--", color="tab:red", linewidth=lw, zorder=1
+                y=rm_prof_qty[0],
+                linestyle="--",
+                color="tab:red",
+                linewidth=lw,
+                zorder=1,
             )
 
     # Plot 2D FDF
@@ -827,8 +870,8 @@ def plot_2d_fdf(
 
 
 def plot_rm_hist(
-    samples: np.ndarray,
-    valid_samples: np.ndarray | None = None,
+    samples: NDArray,
+    valid_samples: NDArray | None = None,
     range: tuple[float, float] | None = None,
     title: str | None = None,
     savename: str = "rm_hist",
@@ -840,9 +883,9 @@ def plot_rm_hist(
 
     Parameters
     ----------
-    samples : `np.ndarray`
+    samples : `NDArray`
         The RM samples to generate a histogram for.
-    valid_samples : `np.ndarray`, optional
+    valid_samples : `NDArray`, optional
         A subset of the RM samples to generate a histogram for. Default: `None`.
     range : `tuple[float, float]`, optional
         A range to indicate on the primary plot. Default: `None`.
@@ -862,7 +905,9 @@ def plot_rm_hist(
         ax_ins = ax.inset_axes([0.1, 0.6, 0.3, 0.3])
         main_ax = ax_ins
         main_samples = valid_samples
-        hist(valid_samples, bins="knuth", ax=ax_ins, histtype="stepfilled", density=True)
+        hist(
+            valid_samples, bins="knuth", ax=ax_ins, histtype="stepfilled", density=True
+        )
         ax_ins.minorticks_on()
 
         if range is not None:
@@ -898,13 +943,13 @@ def plot_rm_hist(
 
 
 def plot_rm_vs_phi(
-    rm_phi_samples: np.ndarray, savename: str = "rm_phi", save_pdf: bool = False
+    rm_phi_samples: NDArray, savename: str = "rm_phi", save_pdf: bool = False
 ) -> None:
     """Plot boxplots showing the distribution of RM samples for each phase bin.
 
     Parameters
     ----------
-    rm_phi_samples : `np.ndarray`
+    rm_phi_samples : `NDArray`
         A 2-D array used to make a boxplot.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'rm_phi'.

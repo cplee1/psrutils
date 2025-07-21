@@ -13,7 +13,7 @@ dependencies = [
     "cmasher",
     "matplotlib",
     "numba",
-    "numpy<2",
+    "numpy>=1.21,<2",
     "scipy",
     "psrqpy",
     "ruff",
@@ -35,7 +35,7 @@ build-backend = "setuptools.build_meta"
 psrutils = ["data/*"]
 
 [tool.ruff]
-line-length = 100
+line-length = 88
 indent-width = 4
 target-version = "py310"
 include = [

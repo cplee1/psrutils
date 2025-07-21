@@ -29,9 +29,14 @@ logger = logging.getLogger(__name__)
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
 @click.option("-c", "centre", is_flag=True, help="Centre the pulse.")
 @click.option("--rmlim", type=float, default=100.0, show_default=True, help="RM limit.")
-@click.option("--rmres", type=float, default=0.1, show_default=True, help="RM resolution.")
 @click.option(
-    "-n", "nsamp", type=int, help="The number of bootstrap samples. By default, will not bootstrap."
+    "--rmres", type=float, default=0.1, show_default=True, help="RM resolution."
+)
+@click.option(
+    "-n",
+    "nsamp",
+    type=int,
+    help="The number of bootstrap samples. By default, will not bootstrap.",
 )
 @click.option(
     "--p0_cutoff",
@@ -43,7 +48,10 @@ logger = logging.getLogger(__name__)
 @click.option("--phi_plotlim", type=float, nargs=2, help="Plot limits in rad/m^2.")
 @click.option("--phase_plotlim", type=float, nargs=2, help="Plot limits in rotations.")
 @click.option(
-    "--discard", type=float, nargs=2, help="Discard RM samples outside this range in rad/m^2."
+    "--discard",
+    type=float,
+    nargs=2,
+    help="Discard RM samples outside this range in rad/m^2.",
 )
 @click.option(
     "--clean_cutoff",
@@ -59,12 +67,18 @@ logger = logging.getLogger(__name__)
 @click.option("--no_clean", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
 @click.option("--boxplot", is_flag=True, help="Plot RM_phi as boxplots.")
 @click.option("--peaks", is_flag=True, help="Plot RM measurements.")
-@click.option("--plot_clean_comps", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
+@click.option(
+    "--plot_clean_comps", is_flag=True, help="Do not run RM-CLEAN on the FDF."
+)
 @click.option("--plot_onpulse", is_flag=True, help="Shade the on-pulse region.")
 @click.option("--plot_pa", is_flag=True, help="Plot the position angle.")
-@click.option("--plot_pol_prof", is_flag=True, help="Plot the full polarisation profile.")
+@click.option(
+    "--plot_pol_prof", is_flag=True, help="Plot the full polarisation profile."
+)
 @click.option("--save_pdf", is_flag=True, help="Save plots in PDF format.")
-@click.option("--save_phase_resolved", is_flag=True, help="Save phase-resolved measurements.")
+@click.option(
+    "--save_phase_resolved", is_flag=True, help="Save phase-resolved measurements."
+)
 @click.option("-d", "dark_mode", is_flag=True, help="Use a dark background.")
 def main(
     archive: str,
@@ -149,7 +163,9 @@ def main(
         onpulse_bins=profile.overest_onpulse_bins,
         offpulse_bins=profile.offpulse_bins,
     )
-    fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = rmsyn_result
+    fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = (
+        rmsyn_result
+    )
     logger.info(f"RM-synthesis statistics: {rm_stats}")
     results["RM_stats"] = rm_stats
 
@@ -176,7 +192,9 @@ def main(
 
         if boxplot:
             psrutils.plotting.plot_rm_vs_phi(
-                rm_phi_samples, savename=f"{cube.source}_rm_phi_boxplot", save_pdf=save_pdf
+                rm_phi_samples,
+                savename=f"{cube.source}_rm_phi_boxplot",
+                save_pdf=save_pdf,
             )
 
         if meas_rm_prof:
@@ -240,7 +258,9 @@ def main(
 
     meas_delta_vi = True
     if meas_delta_vi:
-        delta_vi = psrutils.get_delta_vi(cube, onpulse_bins=profile.overest_onpulse_bins)
+        delta_vi = psrutils.get_delta_vi(
+            cube, onpulse_bins=profile.overest_onpulse_bins
+        )
         if save_phase_resolved:
             results["delta_V_I"] = delta_vi
 

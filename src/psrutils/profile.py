@@ -5,8 +5,8 @@ from typing import Iterable
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
-import numpy.typing as npt
 from astropy.stats import histogram
+from numpy.typing import ArrayLike, NDArray
 from scipy.interpolate import BSpline, PPoly, splrep
 from scipy.stats import normaltest
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class Profile(object):
     """A class for storing and analysing a pulse profile"""
 
-    def __init__(self, profile: npt.ArrayLike) -> None:
+    def __init__(self, profile: ArrayLike) -> None:
         """Create a Profile instance from an array.
 
         Parameters
@@ -40,7 +40,7 @@ class Profile(object):
         self._noise_est: np.float_ | None = None
 
     @property
-    def profile(self) -> npt.NDArray[np.float_]:
+    def profile(self) -> NDArray[np.float_]:
         """The real pulse profile."""
         return self._prof
 
@@ -50,12 +50,12 @@ class Profile(object):
         return self._nbin
 
     @property
-    def bins(self) -> npt.NDArray[np.int_]:
+    def bins(self) -> NDArray[np.int_]:
         """An array of bin indices."""
         return self._bins
 
     @property
-    def phases(self) -> npt.NDArray[np.float_]:
+    def phases(self) -> NDArray[np.float_]:
         """An array of bin phases."""
         return self._bins / (self._nbin - 1)
 
@@ -76,14 +76,20 @@ class Profile(object):
     @property
     def underest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
         """A list of pairs of bin indices defining the underestimated onpulse region(s)."""
-        if not hasattr(self, "_underest_onpulse_pairs") or self._underest_onpulse_pairs is None:
+        if (
+            not hasattr(self, "_underest_onpulse_pairs")
+            or self._underest_onpulse_pairs is None
+        ):
             raise AttributeError("Onpulse has not been computed")
         return self._underest_onpulse_pairs
 
     @property
     def overest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
         """A list of pairs of bin indices defining the overestimated onpulse region(s)."""
-        if not hasattr(self, "_overest_onpulse_pairs") or self._overest_onpulse_pairs is None:
+        if (
+            not hasattr(self, "_overest_onpulse_pairs")
+            or self._overest_onpulse_pairs is None
+        ):
             raise AttributeError("Onpulse has not been computed")
         return self._overest_onpulse_pairs
 
@@ -95,23 +101,29 @@ class Profile(object):
         return self._offpulse_pairs
 
     @property
-    def underest_onpulse_bins(self) -> npt.NDArray[np.int_]:
+    def underest_onpulse_bins(self) -> NDArray[np.int_]:
         """An array of bins in the underestimated onpulse region(s)."""
-        if not hasattr(self, "_underest_onpulse_pairs") or self._underest_onpulse_pairs is None:
+        if (
+            not hasattr(self, "_underest_onpulse_pairs")
+            or self._underest_onpulse_pairs is None
+        ):
             raise AttributeError("Onpulse has not been computed")
         mask = get_profile_mask_from_pairs(self._nbin, self._underest_onpulse_pairs)
         return self._bins[mask]
 
     @property
-    def overest_onpulse_bins(self) -> npt.NDArray[np.int_]:
+    def overest_onpulse_bins(self) -> NDArray[np.int_]:
         """An array of bins in the overestimated onpulse region(s)."""
-        if not hasattr(self, "_overest_onpulse_pairs") or self._overest_onpulse_pairs is None:
+        if (
+            not hasattr(self, "_overest_onpulse_pairs")
+            or self._overest_onpulse_pairs is None
+        ):
             raise AttributeError("Onpulse has not been computed")
         mask = get_profile_mask_from_pairs(self._nbin, self._overest_onpulse_pairs)
         return self._bins[mask]
 
     @property
-    def offpulse_bins(self) -> npt.NDArray[np.int_]:
+    def offpulse_bins(self) -> NDArray[np.int_]:
         """An array of bins in the offpulse region(s)."""
         if not hasattr(self, "_offpulse_pairs") or self._offpulse_pairs is None:
             raise AttributeError("Offpulse has not been computed")
@@ -175,9 +187,13 @@ class Profile(object):
 
         # Mask out the onpulse
         if op_r > op_l:
-            mask = np.where(np.logical_and(self._bins > op_l, self._bins < op_r), True, False)
+            mask = np.where(
+                np.logical_and(self._bins > op_l, self._bins < op_r), True, False
+            )
         else:
-            mask = np.where(np.logical_or(self._bins > op_l, self._bins < op_r), True, False)
+            mask = np.where(
+                np.logical_or(self._bins > op_l, self._bins < op_r), True, False
+            )
         offpulse = self._prof[mask]
 
         return np.std(offpulse)
@@ -386,7 +402,9 @@ class Profile(object):
         self._minima = old_minima
         self._noise_est = old_noise_est
 
-    def measure_pulse_widths(self, peak_fracs: list | None = None, sigma_cutoff: int = 2.0) -> None:
+    def measure_pulse_widths(
+        self, peak_fracs: list | None = None, sigma_cutoff: int = 2.0
+    ) -> None:
         """Measure the pulse width(s) at a given fraction of the peak flux density.
 
         Parameters
@@ -461,7 +479,11 @@ class Profile(object):
                     width = root_pair[1] - self._llim + self._rlim - root_pair[0]
                 widths.append((root_pair, width))
 
-            widths_dict[f"W{peak_frac * 100:.0f}"] = (peak_frac, peak_frac * peak_flux, widths)
+            widths_dict[f"W{peak_frac * 100:.0f}"] = (
+                peak_frac,
+                peak_frac * peak_flux,
+                widths,
+            )
 
         self._widths = widths_dict
 
@@ -510,20 +532,39 @@ class Profile(object):
         xpos = (xrange[1] - xrange[0]) * 0.92 + xrange[0]
         ypos = (yrangeLT[-1] - yrangeLT[0]) * 0.8 + yrangeLT[0]
         axLT.errorbar(
-            xpos, ypos, yerr=self._noise_est, color="k", marker="none", capsize=3, elinewidth=lw
+            xpos,
+            ypos,
+            yerr=self._noise_est,
+            color="k",
+            marker="none",
+            capsize=3,
+            elinewidth=lw,
         )
 
         # Residuals
-        axLM.plot(self._bins, self._prof - self._bspl(self._bins), color="k", linewidth=lw)
+        axLM.plot(
+            self._bins, self._prof - self._bspl(self._bins), color="k", linewidth=lw
+        )
         yrangeLM = axLM.get_ylim()
 
         # Derivatives
-        axLB.plot(self._bins, self._d1_bspl(self._bins), color="k", linewidth=1.2, label="1st")
-        axLB.plot(self._bins, self._d2_bspl(self._bins), color="tab:red", linewidth=lw, label="2nd")
+        axLB.plot(
+            self._bins, self._d1_bspl(self._bins), color="k", linewidth=1.2, label="1st"
+        )
+        axLB.plot(
+            self._bins,
+            self._d2_bspl(self._bins),
+            color="tab:red",
+            linewidth=lw,
+            label="2nd",
+        )
         yrangeLB = axLB.get_ylim()
 
         # Onpulse estimates
-        if hasattr(self, "_overest_onpulse_pairs") and self._overest_onpulse_pairs is not None:
+        if (
+            hasattr(self, "_overest_onpulse_pairs")
+            and self._overest_onpulse_pairs is not None
+        ):
             underest_args = dict(color="tab:blue", alpha=0.2, hatch="///", zorder=0.1)
             overest_args = dict(color="tab:blue", edgecolor=None, alpha=0.2, zorder=0)
             for pairlist, args, flag in zip(
@@ -536,7 +577,9 @@ class Profile(object):
                     continue
 
                 for op_pair in pairlist:
-                    for ax, yrange in zip(left_axes, [yrangeLT, yrangeLM, yrangeLB], strict=True):
+                    for ax, yrange in zip(
+                        left_axes, [yrangeLT, yrangeLM, yrangeLB], strict=True
+                    ):
                         if op_pair[0] < op_pair[-1]:
                             ax.fill_betweenx(yrange, op_pair[0], op_pair[-1], **args)
                         else:
@@ -548,7 +591,12 @@ class Profile(object):
         w_info_lines = []
         if hasattr(self, "_widths") and self._widths is not None:
             w_kwargs = dict(
-                color="tab:red", marker=".", markersize=5, linestyle=":", linewidth=lw, alpha=1.0
+                color="tab:red",
+                marker=".",
+                markersize=5,
+                linestyle=":",
+                linewidth=lw,
+                alpha=1.0,
             )
             for key in self._widths.keys():
                 peak_frac, peak_frac_flux, peak_pairs = self._widths[key]
@@ -559,10 +607,16 @@ class Profile(object):
                     w_info_line.append(f"{width:.1f} ({width / self._nbin * 100:.1f}%)")
                     if plot_width:
                         if wl < wr:
-                            axLT.errorbar(x=[wl, wr], y=[peak_frac_flux] * 2, **w_kwargs)
+                            axLT.errorbar(
+                                x=[wl, wr], y=[peak_frac_flux] * 2, **w_kwargs
+                            )
                         else:
-                            axLT.errorbar(x=[xrange[0], wr], y=[peak_frac_flux] * 2, **w_kwargs)
-                            axLT.errorbar(x=[wl, xrange[1]], y=[peak_frac_flux] * 2, **w_kwargs)
+                            axLT.errorbar(
+                                x=[xrange[0], wr], y=[peak_frac_flux] * 2, **w_kwargs
+                            )
+                            axLT.errorbar(
+                                x=[wl, xrange[1]], y=[peak_frac_flux] * 2, **w_kwargs
+                            )
                 w_info_lines.append("".join(w_info_line))
 
         # Histograms
@@ -573,7 +627,9 @@ class Profile(object):
         res = self._prof - self._bspl(self._bins)
         _, p = normaltest(res)
         hb = histogram(res, **hist_kwargs)
-        axRM.stairs(*hb, color="tab:blue", label=f"all: {p=:.3f}", alpha=0.4, **stairs_kwargs)
+        axRM.stairs(
+            *hb, color="tab:blue", label=f"all: {p=:.3f}", alpha=0.4, **stairs_kwargs
+        )
 
         noff = 0
         if hasattr(self, "_offpulse_pairs") and self._offpulse_pairs is not None:
@@ -585,12 +641,16 @@ class Profile(object):
                     # Real offpulse
                     _, p = normaltest(self._prof[mask])
                     hb = histogram(self._prof[mask], **hist_kwargs)
-                    axRT.stairs(*hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs)
+                    axRT.stairs(
+                        *hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs
+                    )
 
                     # Residual offpulse
                     _, p = normaltest(res[mask])
                     hb = histogram(res[mask], **hist_kwargs)
-                    axRM.stairs(*hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs)
+                    axRM.stairs(
+                        *hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs
+                    )
 
         # Info
         if self._noise_est is not None:
@@ -647,7 +707,7 @@ class Profile(object):
 
 def _get_inbounds_roots(
     roots: Iterable[np.float_], bounds: tuple[np.float_, np.float_]
-) -> npt.NDArray[np.float_]:
+) -> NDArray[np.float_]:
     """Return the roots within the specified bounds.
 
     Parameters
@@ -659,7 +719,7 @@ def _get_inbounds_roots(
 
     Returns
     -------
-    inbounds_roots : `npt.NDArray[np.float_]`
+    inbounds_roots : `NDArray[np.float_]`
         An array of roots within the bounds.
     """
     inbounds_roots = []
@@ -835,7 +895,7 @@ def _fill_onpulse_regions(
 
 def get_profile_mask_from_pairs(
     nbin: int, bin_pairs: Iterable[tuple[np.int_, np.int_]]
-) -> npt.NDArray[np.bool_]:
+) -> NDArray[np.bool_]:
     """Return a profile with the regions defined by the bin_pairs filled with NaNs.
 
     Parameters
@@ -847,7 +907,7 @@ def get_profile_mask_from_pairs(
 
     Returns
     -------
-    mask : `npt.NDArray[np.bool_]`
+    mask : `NDArray[np.bool_]`
         A profile mask that is True between the bin pairs.
     """
     assert bin_pairs is not None

@@ -3,6 +3,7 @@ import logging
 
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import NDArray
 from scipy.integrate import trapezoid
 from scipy.optimize import curve_fit
 from scipy.special import erf
@@ -23,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 def get_bias_corrected_pol_profile(
     cube: psrutils.StokesCube,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, float]:
+) -> tuple[NDArray, NDArray, NDArray, NDArray, float]:
     """Get the full polarisation profile and correct for bias in the linear
     polarisation degree and angle. If no polarisation information is found in
     the archive, then `None` will be returned for all outputs except for the
@@ -36,15 +37,15 @@ def get_bias_corrected_pol_profile(
 
     Returns
     -------
-    iquv_profile : `np.ndarray`
+    iquv_profile : `NDArray`
         A 4xN array containing Stokes I/Q/U/V for N bins.
-    l_true : `np.ndarray | None`
+    l_true : `NDArray | None`
         A 1xN array containing the debiased Stokes L for N bins.
-    pa : `np.ndarray | None`
+    pa : `NDArray | None`
         A 2xN array containing the position angle value and uncertainty.
-    p0_l : `np.ndarray | None`
+    p0_l : `NDArray | None`
         A 1xN array containing the debiased linear polarisation measure L/sigma_I.
-    p0_v : `np.ndarray | None`
+    p0_v : `NDArray | None`
         A 1xN array containing the circular polarisation measure V/sigma_I.
     sigma_i : `float | None`
         The standard deviation of the offpulse noise in the Stokes I profile.
@@ -89,20 +90,20 @@ def get_bias_corrected_pol_profile(
     return iquv_profile, l_true, pa, p0_l, p0_v, sigma_i
 
 
-def lookup_sigma_pa(p0_meas: np.ndarray) -> np.ndarray:
+def lookup_sigma_pa(p0_meas: NDArray) -> NDArray:
     """Get the analytical uncertainty in a position angle measurement given
     the polarisation measure p0.
 
     Parameters
     ----------
-    p0_meas : `np.ndarray`
+    p0_meas : `NDArray`
         An array of p0 values, where p0 = L_true / sigma_I, L_true is the
         debiased intensity of linear polarisation and sigma_I is the offpulse
         noise in the Stokes I profile.
 
     Returns
     -------
-    sigma_meas : `np.ndarray`
+    sigma_meas : `NDArray`
         The uncertainties in the position angles in radians.
     """
     ref = importlib.resources.files("psrutils") / "data/sigma_pa_table.npy"
@@ -154,7 +155,9 @@ def compute_sigma_pa_table(
         integral_table = np.empty_like(sigma_pa_range)
         for jj, isigma in enumerate(sigma_pa_range):
             # Choose a range of PAs to integrate over in the range [-pi, pi)
-            pa_range = np.linspace(pa_true - isigma, pa_true + isigma, 1000, dtype=np.float64)
+            pa_range = np.linspace(
+                pa_true - isigma, pa_true + isigma, 1000, dtype=np.float64
+            )
             pa_range = (pa_range + np.pi) % (2 * np.pi) - np.pi
 
             # Numerically integrate over PA range using the trapezoid rule
@@ -178,14 +181,14 @@ def compute_sigma_pa_table(
 
 
 def pa_dist(
-    pa: np.ndarray[np.float64], pa_true: np.float64, p0: np.float64
-) -> np.ndarray[np.float64]:
+    pa: NDArray[np.float64], pa_true: np.float64, p0: np.float64
+) -> NDArray[np.float64]:
     """Calculate the position angle distribution for low signal-to-noise ratio
     measurements. See from Naghizadeh-Khouei and Clarke (1993).
 
     Parameters
     ----------
-    pa : `np.ndarray[np.float64]`
+    pa : `NDArray[np.float64]`
         An array of position angles to evaluate the distribution at.
     pa_true : `np.float64`
         The centre of the distribution.
@@ -194,7 +197,7 @@ def pa_dist(
 
     Returns
     -------
-    G_pa : `np.ndarray[np.float64]`
+    G_pa : `NDArray[np.float64]`
         The distribution evaluated at pa.
     """
     k = np.pi ** (-0.5)
@@ -203,19 +206,21 @@ def pa_dist(
     return G_pa
 
 
-def get_delta_vi(cube: psrutils.StokesCube, onpulse_bins: np.ndarray | None = None) -> np.ndarray:
+def get_delta_vi(
+    cube: psrutils.StokesCube, onpulse_bins: NDArray | None = None
+) -> NDArray:
     """Calculate the change in Stokes V/I over the observing bandwidth.
 
     Parameters
     ----------
     cube : `psrutils.StokesCube`
         A StokesCube object.
-    onpulse_bins : `np.ndarray`, optional
+    onpulse_bins : `NDArray`, optional
         A list of bins corresponding to the on-pulse region. Default: `None`.
 
     Returns
     -------
-    delta_vi : `np.ndarray`
+    delta_vi : `NDArray`
         The change in Stokes V/I calculated per bin.
     """
     freqs = cube.freqs / 1e6  # MHz
@@ -232,7 +237,8 @@ def get_delta_vi(cube: psrutils.StokesCube, onpulse_bins: np.ndarray | None = No
             continue
         vi_spectrum = vi_spectra[:, bin_idx]
         ql, qh = np.quantile(
-            vi_spectrum[~np.isnan(vi_spectrum) & np.isfinite(vi_spectrum)], q=(0.05, 0.95)
+            vi_spectrum[~np.isnan(vi_spectrum) & np.isfinite(vi_spectrum)],
+            q=(0.05, 0.95),
         )
         mask = (vi_spectrum > ql) & (vi_spectrum < qh)
         try:
