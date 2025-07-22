@@ -1,3 +1,7 @@
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 import itertools
 import logging
 from typing import Iterable

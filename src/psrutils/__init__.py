@@ -1,3 +1,7 @@
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 from importlib.metadata import version
 
 from matplotlib.pyplot import rcParams

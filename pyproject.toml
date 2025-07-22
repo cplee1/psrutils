@@ -1,14 +1,19 @@
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 [project]
 name = "psrutils"
 version = "0.0.1"
-description = "A collection of Python-based utilities to analyse PSRCHIVE archives."
+description = "A collection of Python-based utilities to analyse pulsar data."
 authors = [
     { name = "Christopher Lee" },
 ]
-license = { text = "MIT License" }
+license = { file = "LICENSE" }
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
 dependencies = [
+    "astropy",
     "click",
     "cmasher",
     "matplotlib",

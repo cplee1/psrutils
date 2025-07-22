@@ -1,3 +1,7 @@
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 from typing import Tuple
 
 import click
