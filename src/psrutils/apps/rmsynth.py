@@ -129,8 +129,9 @@ def main(
         cube.rotate_phase(phase_rot)
         results["Phase_rotation"] = phase_rot
 
-    # Note that we are normalising the profile here so that the numbers are sensible, but this
-    # needs to be accounted for when accessing the measured values later (e.g. noise_est)
+    # Note that we are normalising the profile here so that the numbers are
+    # sensible, but this needs to be accounted for when accessing the
+    # measured values later (e.g. noise_est)
     peak_flux = np.max(cube.profile)
     profile = psrutils.Profile(cube.profile / peak_flux)
     profile.bootstrap_onpulse_regions()
@@ -179,8 +180,8 @@ def main(
         else:
             rm_phi_samples_valid = rm_phi_samples
         with warnings.catch_warnings():
-            # For bins with no valid samples (when using --discard), suppress
-            # the "Mean of empty slice" warning
+            # For bins with no valid samples (when using --discard),
+            # suppress the "Mean of empty slice" warning
             warnings.simplefilter("ignore", category=RuntimeWarning)
             rm_phi_meas = np.nanmean(rm_phi_samples_valid, axis=1)
             rm_phi_unc = np.nanstd(rm_phi_samples_valid, axis=1)

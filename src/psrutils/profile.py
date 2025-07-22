@@ -15,6 +15,7 @@ __all__ = ["Profile", "get_profile_mask_from_pairs", "get_offpulse_from_onpulse"
 logger = logging.getLogger(__name__)
 
 
+# TODO: Format docstrings
 class Profile(object):
     """A class for storing and analysing a pulse profile"""
 
@@ -75,7 +76,8 @@ class Profile(object):
 
     @property
     def underest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
-        """A list of pairs of bin indices defining the underestimated onpulse region(s)."""
+        """A list of pairs of bin indices defining the underestimated
+        onpulse region(s)."""
         if (
             not hasattr(self, "_underest_onpulse_pairs")
             or self._underest_onpulse_pairs is None
@@ -85,7 +87,8 @@ class Profile(object):
 
     @property
     def overest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
-        """A list of pairs of bin indices defining the overestimated onpulse region(s)."""
+        """A list of pairs of bin indices defining the overestimated
+        onpulse region(s)."""
         if (
             not hasattr(self, "_overest_onpulse_pairs")
             or self._overest_onpulse_pairs is None
@@ -95,7 +98,8 @@ class Profile(object):
 
     @property
     def offpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
-        """A list of pairs of bin indices defining the offpulse region(s)."""
+        """A list of pairs of bin indices defining the offpulse
+        region(s)."""
         if not hasattr(self, "_offpulse_pairs") or self._offpulse_pairs is None:
             raise AttributeError("Offpulse has not been computed")
         return self._offpulse_pairs
@@ -133,20 +137,22 @@ class Profile(object):
     def get_opt_pulse_window(
         self, windowsize: int | None = None, maximise: bool = False
     ) -> tuple[int, int]:
-        """Find the pulse window which minimises/maximises the integrated flux density within it.
-        Noise should integrate towards zero, so minimising the integral will find an offpulse
-        window. Conversely, maximising the integral will find an onpulse window. The window size
-        should be tweaked depending on the pulsar.
+        """Find the pulse window which minimises/maximises the integrated
+        flux density within it. Noise should integrate towards zero, so
+        minimising the integral will find an offpulse window. Conversely,
+        maximising the integral will find an onpulse window. The window
+        size should be tweaked depending on the pulsar.
 
         Method taken from PyPulse (Lam, 2017. https://ascl.net/1706.011).
 
         Parameters
         ----------
         windowsize : `int`, optional
-            Window width (in bins) defining the trial regions to integrate. If `None`, then will use
-            1/8 of the profile. Default: `None`.
+            Window width (in bins) defining the trial regions to integrate.
+            If `None`, then will use 1/8 of the profile. Default: `None`.
         maximise : `bool`, optional
-            If `True`, will maximise the integral; otherwise, will minimise. Default: `False`.
+            If `True`, will maximise the integral; otherwise, will
+            minimise. Default: `False`.
 
         Returns
         -------
@@ -174,13 +180,15 @@ class Profile(object):
         return left_idx, right_idx
 
     def get_simple_noise_est(self) -> np.float_:
-        """Get an estimate of the standard deviation of the offpulse noise using the sliding window
+        """Get an estimate of the standard deviation of the offpulse noise
+        using the sliding window
         method.
 
         Returns
         -------
         noise_est : `float`
-            The standard deviation of the profile within the minimised sliding window.
+            The standard deviation of the profile within the minimised
+            sliding window.
         """
         # Find the window with the minimum integrated flux within it
         op_l, op_r = self.get_opt_pulse_window()
@@ -199,17 +207,20 @@ class Profile(object):
         return np.std(offpulse)
 
     def fit_spline(self, sigma: float, k: int = 5) -> None:
-        """Fit a periodic smoothing spline with a smoothness equal to `nbin*sigma**2`, where `sigma`
-        is an estimate of the standard deviation of the noise in the profile.
+        """Fit a periodic smoothing spline with a smoothness equal to
+        `nbin*sigma**2`, where `sigma` is an estimate of the standard
+        deviation of the noise in the profile.
 
         Parameters
         ----------
         sigma : `float`
             The standard deviation of the noise in the profile.
         k : `int`
-            The degree of the spline fit. See `scipy.interpolate.splrep()` for details.
+            The degree of the spline fit. See `scipy.interpolate.splrep()`
+            for details.
         """
-        # Fit a degree-k smoothing spline in the B-spline basis with periodic boundary conditions
+        # Fit a degree-k smoothing spline in the B-spline basis with
+        # periodic boundary conditions
         tck = splrep(self._bins, self._prof, k=k, s=self._nbin * sigma**2, per=True)
         bspl = BSpline(*tck, extrapolate="periodic")
         d1_bspl = bspl.derivative(nu=1)
@@ -234,34 +245,44 @@ class Profile(object):
         list[tuple[np.float_, np.float_]] | None,
         list[np.float_] | None,
     ]:
-        """Find under- and over-estimates of the onpulse region(s) using the following method:
+        """Find under- and over-estimates of the onpulse region(s) usin
+        the following method:
 
-        (1) Fit a smoothing spline with the smoothness parameter set to `nbin*noise_est**2`.
+        (1) Fit a smoothing spline with the smoothness parameter set to
+            `nbin*noise_est**2`.
 
-        (2) Find the maxima of the profile that exceed `noise_est*sigma_cutoff`.
+        (2) Find the maxima of the profile that exceed
+            `noise_est*sigma_cutoff`.
 
-        (3) Find the flanking inflections and minima around the maxima. These define the under- and
-            over-estimates of the onpulse regions, respectively. If the flux between two adjacent
-            onpulse regions exceeds `noise_est*sigma_cutoff`, then considered them a single region.
+        (3) Find the flanking inflections and minima around the maxima.
+            These define the under- and over-estimates of the onpulse
+            regions, respectively. If the flux between two adjacent onpulse
+            regions exceeds `noise_est*sigma_cutoff`, then considered them
+            a single region.
 
         Parameters
         ----------
         noise_est : `float`, optional
-            An estimate of the standard deviation of the offpulse noise that will be used to
-            determine if a pulse peak exceeds the sigma cutoff. If `None` is given, then the noise
-            will be estimated using the `get_simple_noise_est()` method. Default: `None`.
+            An estimate of the standard deviation of the offpulse noise
+            that will be used to determine if a pulse peak exceeds the
+            sigma cutoff. If `None` is given, then the noise will be
+            estimated using the `get_simple_noise_est()` method.
+            Default: `None`.
         sigma_cutoff : `float`, optional
-            The number of standard deviations above which a peak will be considered real.
-            Default: 2.0.
+            The number of standard deviations above which a peak will be
+            considered real. Default: 2.0.
 
         Returns
         -------
         underest_onpulse_pairs : `list[tuple[np.float_, np.float_]] | None`
-            A list of intervals defining the underestimated onpulse region(s) in bin units.
+            A list of intervals defining the underestimated onpulse
+            region(s) in bin units.
         overest_onpulse_pairs : `list[tuple[np.float_, np.float_]] | None`
-            A list of intervals defining the overestimated onpulse region(s) in bin units.
+            A list of intervals defining the overestimated onpulse
+            region(s) in bin units.
         true_maxima : `list[np.float_] | None`
-            A list of profile maxima above the sigma threshold in bin units.
+            A list of profile maxima above the sigma threshold in bin
+            units.
         minima : `list[np.float_] | None`
             A list of all profile minima in bin units.
         """
@@ -317,23 +338,25 @@ class Profile(object):
     def bootstrap_onpulse_regions(
         self, ntrials: int = 10, tol: float = 0.05, sigma_cutoff: float = 2.0
     ) -> None:
-        """Bootstrap the onpulse-finding method by fitting a spline with the new estimated offpulse
-        noise on each iteration. The bootstrapping is repeated until either the maximum number of
-        trials has been reaches or the fractional difference between subsequent noise estimates
-        falls below a specified tolerance.
+        """Bootstrap the onpulse-finding method by fitting a spline with
+        the new estimated offpulse noise on each iteration. The
+        bootstrapping is repeated until either the maximum number of trials
+        has been reaches or the fractional difference between subsequent
+        noise estimates falls below a specified tolerance.
 
         See the `get_onpulse_regions()` method for further details.
 
         Parameters
         ----------
         ntrials : `int`, optional
-            The maximum number of times to iterate the noise estimate. Default 10.
+            The maximum number of times to iterate the noise estimate.
+            Default 10.
         tol : `float`, optional
-            The minimum fractional difference between subsequent noise estimates before exiting the
-            loop. Default 0.1.
+            The minimum fractional difference between subsequent noise
+            estimates before exiting the loop. Default 0.1.
         sigma_cutoff : `float`, optional
-            The number of standard deviations above which a peak will be considered real.
-            Default 2.0.
+            The number of standard deviations above which a peak will be
+            considered real. Default 2.0.
         """
         logger.debug("Bootstrapping to estimate onpulse...")
 
@@ -405,15 +428,17 @@ class Profile(object):
     def measure_pulse_widths(
         self, peak_fracs: list | None = None, sigma_cutoff: int = 2.0
     ) -> None:
-        """Measure the pulse width(s) at a given fraction of the peak flux density.
+        """Measure the pulse width(s) at a given fraction of the peak flux
+        density.
 
         Parameters
         ----------
         peak_fracs : `list`, optional
-            The peak fraction to find the width(s) at (i.e. 0.1 for W10). Default: [0.5, 0.1].
+            The peak fraction to find the width(s) at (i.e. 0.1 for W10).
+            Default: [0.5, 0.1].
         sigma_cutoff : `int`, optional
-            The number of standard deviations above which a peak will be considered real.
-            Default 2.0.
+            The number of standard deviations above which a peak will be
+            considered real. Default 2.0.
         """
         assert self._ppoly
         assert self._d1_ppoly
@@ -442,7 +467,8 @@ class Profile(object):
             # There must be an even number of roots
             assert len(roots) % 2 == 0, f"{len(roots)} is not divisible by 2"
 
-            # Match each leading edge root with its corresponding trailing edge root
+            # Match each leading edge root with its corresponding trailin
+            #  edge root
             root_pairs = []
             current_pair = []
             for ii in range(len(roots)):
@@ -463,7 +489,8 @@ class Profile(object):
             # Sanity check
             assert len(root_pairs) == len(roots) / 2, "root pairing unsuccessful"
 
-            # Merge the pairs if they are contained within the same overestimated onpulse region
+            # Merge the pairs if they are contained within the same
+            # overestimated onpulse region
             root_pairs = _get_contiguous_regions(root_pairs, self._minima)
 
             # Fill the pairs if there is signal between them
@@ -494,7 +521,8 @@ class Profile(object):
         plot_width: bool = False,
         savename: str = "profile_diagnostics",
     ) -> None:
-        """Create a plot showing various diagnostics to verify that the spline fit is reasonable.
+        """Create a plot showing various diagnostics to verify that the
+        spline fit is reasonable.
 
         Parameters
         ----------
@@ -503,7 +531,8 @@ class Profile(object):
         plot_overestimate : `bool`, optional
             Show the onpulse overestimate(s). Default: `True`.
         savename : `str`, optional
-            The name of the output plot, excluding extension. Default: "profile_diagnostics".
+            The name of the output plot, excluding extension.
+            Default: "profile_diagnostics".
         """
         # Create figure and axes
         fig = plt.figure(layout="constrained", figsize=(10, 7))
@@ -670,7 +699,8 @@ class Profile(object):
         lines = [
             f"S/N={snr}",
             f"Nbin={self._nbin}",
-            f"Nbin(on)={self._nbin - noff} ({(self._nbin - noff) / self._nbin * 100:.1f}%)",
+            f"Nbin(on)={self._nbin - noff} "
+            + f"({(self._nbin - noff) / self._nbin * 100:.1f}%)",
             f"Nbin(off)={noff} ({noff / self._nbin * 100:.1f}%)",
         ] + w_info_lines
         axRB.text(0.0, 1.0, "\n".join(lines), **text_kwargs)
@@ -705,6 +735,7 @@ class Profile(object):
         plt.close()
 
 
+# TODO: Format docstring
 def _get_inbounds_roots(
     roots: Iterable[np.float_], bounds: tuple[np.float_, np.float_]
 ) -> NDArray[np.float_]:
@@ -729,6 +760,7 @@ def _get_inbounds_roots(
     return np.array(inbounds_roots)
 
 
+# TODO: Format docstring
 def _get_flanking_roots(
     locs: Iterable[np.float_], roots: Iterable[np.float_]
 ) -> list[tuple[np.float_, np.float_]]:
@@ -772,6 +804,7 @@ def _get_flanking_roots(
     return [tuple(pair) for pair in pairs]
 
 
+# TODO: Format docstring
 def _get_contiguous_regions(
     pairs: Iterable[tuple[np.float_, np.float_]], minima: Iterable[np.float_]
 ) -> list[tuple[np.float_, np.float_]]:
@@ -811,6 +844,7 @@ def _get_contiguous_regions(
     return [tuple(pair) for pair in new_pairs]
 
 
+# TODO: Format docstring
 def _fill_onpulse_regions(
     onpulse_pairs: list[tuple[np.float_, np.float_]],
     bspl: BSpline,
@@ -818,33 +852,37 @@ def _fill_onpulse_regions(
     sigma_cutoff: float,
     interval: tuple[np.float_, np.float_],
 ) -> list[tuple[np.float_, np.float_]]:
-    """Attempts to fill small gaps in the onpulse pairs provided these gaps exceed a set sigma
-    threshold (i.e. they resemble real signal.)
+    """Attempts to fill small gaps in the onpulse pairs provided these gaps
+    exceed a set sigma threshold (i.e. they resemble real signal.)
 
     Parameters
     ----------
     onpulse_pairs : `list[tuple[np.float_, np.float_]]`
-        A list of pairs of bin indices that mark the onpulse regions of the profile.
+        A list of pairs of bin indices that mark the onpulse regions of the
+        profile.
     bspl : `BSpline`
         The smoothed profile as a BSpline object.
     noise_est : `float`
         The standard deviation of the offpulse noise.
     sigma_cutoff : `float`
-        The number of standard deviations above which a signal will be considered real.
+        The number of standard deviations above which a signal will be
+        considered real.
     interval : `tuple[np.float_, np.float_]`
         The full range of bins that the pairs are a subset of.
 
     Return:
     -------
     filled_onpulse_pairs : `list[tuple[np.float_, np.float_]]`
-        A list of pairs of bin indices that represent the ranges of the filled onpulse regions.
+        A list of pairs of bin indices that represent the ranges of the
+        filled onpulse regions.
     """
     # Nothing to do if the pairs are of length 1
     if len(onpulse_pairs) <= 1:
         return onpulse_pairs
 
     loop_pairs = onpulse_pairs.copy()
-    # Create two cycling generators to avoid out of bounds errors for the last pair
+    # Create two cycling generators to avoid out of bounds errors for the
+    # last pair
     on_pulse_ammendments = []
     current_pair_gen = itertools.cycle(loop_pairs)
     next_pair_gen = itertools.cycle(loop_pairs)
@@ -893,10 +931,12 @@ def _fill_onpulse_regions(
     return [tuple(pair) for pair in filled_onpulse_pairs]
 
 
+# TODO: Format docstring
 def get_profile_mask_from_pairs(
     nbin: int, bin_pairs: Iterable[tuple[np.int_, np.int_]]
 ) -> NDArray[np.bool_]:
-    """Return a profile with the regions defined by the bin_pairs filled with NaNs.
+    """Return a profile with the regions defined by the bin_pairs filled
+    with NaNs.
 
     Parameters
     ----------
@@ -929,11 +969,13 @@ def get_profile_mask_from_pairs(
     return mask
 
 
+# TODO: Format docstring
 def get_offpulse_from_onpulse(
     onpulse_pairs: list[tuple[np.int_, np.int_]],
 ) -> list[tuple[np.int_, np.int_]]:
-    """Given a list of pairs of bin indices defining the onpulse regions, find the corresponding
-    list of pairs of bin indices defining the offpulse regions.
+    """Given a list of pairs of bin indices defining the onpulse regions,
+    find the corresponding list of pairs of bin indices defining the
+    offpulse regions.
 
     Parameters
     ----------

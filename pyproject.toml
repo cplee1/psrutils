@@ -36,7 +36,8 @@ build-backend = "setuptools.build_meta"
 psrutils = ["data/*"]
 
 [tool.ruff]
-line-length = 88
+line-length = 88  # the ruff/Black default
+# note: docstrings should be max 75 characters per the numpydoc standard
 indent-width = 4
 target-version = "py310"
 include = [

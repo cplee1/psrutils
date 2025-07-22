@@ -12,6 +12,7 @@ from matplotlib.axes import Axes
 from numpy.typing import NDArray
 
 import psrutils
+from psrutils import StokesCube
 
 __all__ = [
     "centre_offset_degrees",
@@ -42,7 +43,7 @@ def format_ticks(ax: Axes) -> None:
 
 
 def add_profile_to_axes(
-    cube: psrutils.StokesCube,
+    cube: StokesCube,
     ax_pa: Axes | None = None,
     ax_prof: Axes | None = None,
     normalise_flux: bool = True,
@@ -135,23 +136,24 @@ def add_profile_to_axes(
 
 
 def plot_profile(
-    cube: psrutils.StokesCube,
+    cube: StokesCube,
     pol: int = 0,
     savename: str = "profile",
     save_pdf: bool = False,
 ) -> None:
-    """Create a plot of integrated flux density vs phase for a specified polarisation.
+    """Create a plot of integrated flux density vs phase for a specified
+    polarisation.
 
     Parameters
     ----------
-    cube : `psrutils.StokesCube`
+    cube : StokesCube
         A StokesCube object.
-    pol : `int`, optional
-        The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
-    savename : `str`, optional
-        The name of the plot file excluding the extension. Default: 'profile'.
-    save_pdf : `bool`, optional
-        Save the plot as a pdf? Default: `False`.
+    pol : int, default: 0
+        The polarisation index (0=I, 1=Q, 2=U, 3=V).
+    savename : str, default: "profile"
+        The name of the plot file excluding the extension.
+    save_pdf : bool, default: Fale
+        Save the plot as a pdf?
     """
     if pol not in [0, 1, 2, 3]:
         raise ValueError("pol must be an integer between 0 and 3 inclusive")
@@ -178,7 +180,7 @@ def plot_profile(
 
 
 def plot_pol_profile(
-    cube: psrutils.StokesCube,
+    cube: StokesCube,
     rmsf_fwhm: float | None = None,
     rm_phi_qty: tuple[NDArray, NDArray] | None = None,
     rm_prof_qty: tuple[float, float] | None = None,
@@ -190,34 +192,34 @@ def plot_pol_profile(
     save_pdf: bool = False,
     save_data: bool = False,
 ) -> None:
-    """Create a plot of integrated flux density vs phase for a specified polarisation.
+    """Create a plot of integrated flux density vs phase for a specified
+    polarisation.
 
     Parameters
     ----------
-    cube : `psrutils.StokesCube`
+    cube : StokesCube
         A StokesCube object.
-    rmsf_fwhm : `float`, optional
-        The FWHM of the RM spread function. Default: `None`.
-    rm_phi_qty : `tuple[NDArray, NDArray]`, optional
-        The RM measurements and uncertainties for each phase bin. Default: `None`.
-    rm_prof_qty : `tuple[float, float]`, optional
-        The RM measurement and uncertainty for the profile. Default: `None`.
-    rm_mask : `NDArray`, optional
+    rmsf_fwhm : float, default: None
+        The FWHM of the RM spread function.
+    rm_phi_qty : tuple[NDArray, NDArray], default: None
+        The RM measurements and uncertainties for each phase bin.
+    rm_prof_qty : tuple[float, float], default: None
+        The RM measurement and uncertainty for the profile.
+    rm_mask : NDArray, default: None
         An array of booleans to act as a mask for the measured RM values.
-        Default: `None`.
-    delta_vi : `NDArray`, optional
-        The change in Stokes V/I over the bandwidth per bin. Default: `None`.
-    phase_range : `tuple[float, float]`, optional
-        The phase range in rotations. Default: [0, 1].
-    p0_cutoff : `float`, optional
+    delta_vi : NDArray, default: None
+        The change in Stokes V/I over the bandwidth per bin.
+    phase_range : tuple[float, float], default: [0, 1]
+        The phase range in rotations.
+    p0_cutoff : float, default: 3.0
         Mask all RM and PA measurements below this polarisation measure. If `None` is
-        specified then no mask will be applied. Default: 3.0.
-    savename : `str`, optional
-        The name of the plot file excluding the extension. Default: 'pol_profile'.
-    save_pdf : `bool`, optional
-        Save the plot as a pdf? Default: `False`.
-    save_data : `bool`, optional
-        Save the plot data? Default: `False`.
+        specified then no mask will be applied.
+    savename : str, default: "pol_profile"
+        The name of the plot file excluding the extension.
+    save_pdf : bool, default: False
+        Save the plot as a pdf?
+    save_data : bool, default: False
+        Save the plot data?
     """
     valid_rm = False
     if rm_prof_qty is not None:
@@ -447,8 +449,9 @@ def plot_pol_profile(
         np.savetxt(f"{savename}_data.csv", prof_array.T, delimiter=",", header=header)
 
 
+# TODO: Format docstring
 def plot_freq_phase(
-    cube: psrutils.StokesCube,
+    cube: StokesCube,
     pol: int = 0,
     savename: str = "freq_phase",
     save_pdf: bool = False,
@@ -457,12 +460,13 @@ def plot_freq_phase(
 
     Parameters
     ----------
-    cube : `psrutils.StokesCube`
+    cube : `StokesCube`
         A StokesCube object.
     pol : `int`, optional
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
     savename : `str`, optional
-        The name of the plot file excluding the extension. Default: 'freq_phase'.
+        The name of the plot file excluding the extension.
+        Default: 'freq_phase'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
     """
@@ -491,8 +495,9 @@ def plot_freq_phase(
     plt.close()
 
 
+# TODO: Format docstring
 def plot_time_phase(
-    cube: psrutils.StokesCube,
+    cube: StokesCube,
     pol: int = 0,
     savename: str = "time_phase",
     save_pdf: bool = False,
@@ -501,12 +506,13 @@ def plot_time_phase(
 
     Parameters
     ----------
-    cube : `psrutils.StokesCube`
+    cube : `StokesCube`
         A StokesCube object.
     pol : `int`, optional
         The polarisation index (0=I, 1=Q, 2=U, 3=V). Default: 0.
     savename : `str`, optional
-        The name of the plot file excluding the extension. Default: 'time_phase'.
+        The name of the plot file excluding the extension.
+        Default: 'time_phase'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
     """
@@ -535,8 +541,9 @@ def plot_time_phase(
     plt.close()
 
 
+# TODO: Format docstring
 def plot_2d_fdf(
-    cube: psrutils.StokesCube,
+    cube: StokesCube,
     fdf_amp_2D: NDArray,
     phi: NDArray,
     rmsf_fwhm: float,
@@ -560,7 +567,7 @@ def plot_2d_fdf(
 
     Parameters
     ----------
-    cube : `psrutils.StokesCube`
+    cube : `StokesCube`
         A StokesCube object.
     fdf_amp_2D: `NDArray`
         The amplitude of the FDF, with dimensions (phase, phi).
@@ -569,11 +576,14 @@ def plot_2d_fdf(
     rmsf_fwhm : `float`
         The FWHM of the RM spread function.
     rm_phi_qty : `tuple[NDArray, NDArray]`, optional
-        The RM measurements and uncertainties for each phase bin. Default: `None`.
+        The RM measurements and uncertainties for each phase bin.
+        Default: `None`.
     rm_prof_qty : `tuple[float, float]`, optional
-        The RM measurement and uncertainty for the profile. Default: `None`.
+        The RM measurement and uncertainty for the profile.
+        Default: `None`.
     onpulse_pairs : `list`, optional
-        An list of bin index pairs defining the onpulse region(s). If `None`, will use the
+        An list of bin index pairs defining the onpulse region(s). If
+        `None`, will use the
         full phase range. Default: `None`.
     rm_mask : `NDArray`, optional
         An array of booleans to act as a mask for the measured RM values.
@@ -591,10 +601,11 @@ def plot_2d_fdf(
     phi_range : `tuple[float, float]`, optional
         The Faraday depth range in rad/m^2. Default: full range.
     p0_cutoff : `float`, optional
-        Mask all RM and PA measurements below this polarisation measure. If `None` is
-        specified then no mask will be applied. Default: 3.0.
+        Mask all RM and PA measurements below this polarisation measure.
+        If `None` is specified then no mask will be applied. Default: 3.0.
     bin_func : `Callable`, optional
-        A function that maps the phase bins from [0,1] to anything. Default: `None`.
+        A function that maps the phase bins from [0,1] to anything.
+        Default: `None`.
     savename : `str`, optional
         The name of the plot file excluding the extension. Default: 'fdf'.
     save_pdf : `bool`, optional
@@ -869,6 +880,7 @@ def plot_2d_fdf(
     plt.close()
 
 
+# TODO: Format docstring
 def plot_rm_hist(
     samples: NDArray,
     valid_samples: NDArray | None = None,
@@ -877,22 +889,24 @@ def plot_rm_hist(
     savename: str = "rm_hist",
     save_pdf: bool = False,
 ) -> None:
-    """Plot a histogram of RM samples. If 'valid_samples' are provided, then
-    plot them in an inset. If 'range' is also provided, then indicate this range
-    on the primary plot using dashed lines.
+    """Plot a histogram of RM samples. If 'valid_samples' are provided,
+    then plot them in an inset. If 'range' is also provided, then indicate
+    this range on the primary plot using dashed lines.
 
     Parameters
     ----------
     samples : `NDArray`
         The RM samples to generate a histogram for.
     valid_samples : `NDArray`, optional
-        A subset of the RM samples to generate a histogram for. Default: `None`.
+        A subset of the RM samples to generate a histogram for.
+        Default: `None`.
     range : `tuple[float, float]`, optional
         A range to indicate on the primary plot. Default: `None`.
     title : `str`, optional
         A title to add to the figure. Default: `None`.
     savename : `str`, optional
-        The name of the plot file excluding the extension. Default: 'rm_hist'.
+        The name of the plot file excluding the extension.
+        Default: 'rm_hist'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
     """
@@ -942,17 +956,20 @@ def plot_rm_hist(
     plt.close()
 
 
+# TODO: Format docstring
 def plot_rm_vs_phi(
     rm_phi_samples: NDArray, savename: str = "rm_phi", save_pdf: bool = False
 ) -> None:
-    """Plot boxplots showing the distribution of RM samples for each phase bin.
+    """Plot boxplots showing the distribution of RM samples for each phase
+    bin.
 
     Parameters
     ----------
     rm_phi_samples : `NDArray`
         A 2-D array used to make a boxplot.
     savename : `str`, optional
-        The name of the plot file excluding the extension. Default: 'rm_phi'.
+        The name of the plot file excluding the extension.
+        Default: 'rm_phi'.
     save_pdf : `bool`, optional
         Save the plot as a pdf? Default: `False`.
     """

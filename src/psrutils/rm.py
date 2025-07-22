@@ -21,6 +21,7 @@ __all__ = ["rm_synthesis", "rm_clean", "get_rm_iono"]
 logger = logging.getLogger(__name__)
 
 
+# TODO: Format docstring
 def _fit_linear_model(freqs: NDArray, amps: NDArray) -> NDArray:
     """Fit a linear model to spectral data.
 
@@ -51,6 +52,7 @@ def _fit_linear_model(freqs: NDArray, amps: NDArray) -> NDArray:
     return model
 
 
+# TODO: Format docstring
 def _normalise_spectrum(
     P: NDArray, S: NDArray, freqs: NDArray, norm: str | None = None
 ) -> NDArray:
@@ -90,6 +92,7 @@ def _normalise_spectrum(
     return P / model, model
 
 
+# TODO: Format docstring
 def _measure_rm(phi: NDArray, fdf_amp: NDArray) -> Tuple[float, float]:
     """Measure the RM and its statistical uncertainty from a FDF.
 
@@ -124,6 +127,7 @@ def _measure_rm(phi: NDArray, fdf_amp: NDArray) -> Tuple[float, float]:
     return fdf_peak_rm, fdf_peak_amp
 
 
+# TODO: Format docstring
 def _measure_rm_unc_analytic(
     fdf_peak_amp: float, rmsf_fwhm: float, noise: NDArray
 ) -> float:
@@ -147,6 +151,7 @@ def _measure_rm_unc_analytic(
     return rmsf_fwhm / (2.355 * fdf_snr)
 
 
+# TODO: Format docstring
 def rm_synthesis(
     cube: psrutils.StokesCube,
     phi: NDArray,
@@ -177,7 +182,8 @@ def rm_synthesis(
     boostrap_nsamp : `int`, optional
         Number of bootstrap iterations. Default: `None`.
     onpulse_bins : `NDArray`
-        A list of bins corresponding to the onpulse region. Default: `None`.
+        A list of bins corresponding to the onpulse region.
+        Default: `None`.
     offpulse_bins : `NDArray`, optional
         The bin indices of the offpulse window. Default: `None`.
     """
@@ -335,6 +341,7 @@ def rm_synthesis(
     )
 
 
+# TODO: Format docstring
 def _rm_clean_1d(
     phi: NDArray,
     fdf: NDArray,
@@ -403,6 +410,7 @@ def _rm_clean_1d(
     return cln_fdf, cln_model, modcomp, res
 
 
+# TODO: Format docstring
 def rm_clean(
     phi: NDArray,
     fdf: NDArray,
@@ -453,6 +461,7 @@ def rm_clean(
     return cln_fdf, cln_model, cln_comps, cln_res
 
 
+# TODO: Format docstring
 def get_rm_iono(
     cube: psrutils.StokesCube,
     bootstrap_nsamp: int | None = None,
@@ -467,8 +476,9 @@ def get_rm_iono(
     cube : `psrutils.StokesCube`
         A StokesCube object.
     bootstrap_nsamp : `int | None`, optional
-        The number of bootstrap iteration to use to find the mean ionospheric RM. If `None` is
-        provided, then no bootstrapping will be performed. Default: `None`.
+        The number of bootstrap iteration to use to find the mean
+        ionospheric RM. If `None` is provided, then no bootstrapping will
+        be performed. Default: `None`.
     prefix : `str`, optional
         The analysis centre prefix. Default: "jpl".
     server : `str`, optional
@@ -481,7 +491,8 @@ def get_rm_iono(
     rm : `np.float_`
         The mean ionospheric RM during the observation.
     rm_err : `np.float_`
-        The standard deviation of the mean ionospheric RM during the observation.
+        The standard deviation of the mean ionospheric RM during the
+        observation.
     """
     mwa_loc = EarthLocation(
         lat=-26.703319 * u.deg, lon=116.67081 * u.deg, height=377.827 * u.m

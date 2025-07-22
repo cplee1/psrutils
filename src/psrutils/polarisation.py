@@ -22,13 +22,14 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
+# TODO: Format docstring
 def get_bias_corrected_pol_profile(
     cube: psrutils.StokesCube,
 ) -> tuple[NDArray, NDArray, NDArray, NDArray, float]:
     """Get the full polarisation profile and correct for bias in the linear
-    polarisation degree and angle. If no polarisation information is found in
-    the archive, then `None` will be returned for all outputs except for the
-    Stokes I profile.
+    polarisation degree and angle. If no polarisation information is found
+    in the archive, then `None` will be returned for all outputs except for
+    the Stokes I profile.
 
     Parameters
     ----------
@@ -44,11 +45,13 @@ def get_bias_corrected_pol_profile(
     pa : `NDArray | None`
         A 2xN array containing the position angle value and uncertainty.
     p0_l : `NDArray | None`
-        A 1xN array containing the debiased linear polarisation measure L/sigma_I.
+        A 1xN array containing the debiased linear polarisation measure
+        L/sigma_I.
     p0_v : `NDArray | None`
         A 1xN array containing the circular polarisation measure V/sigma_I.
     sigma_i : `float | None`
-        The standard deviation of the offpulse noise in the Stokes I profile.
+        The standard deviation of the offpulse noise in the Stokes I
+        profile.
     """
     iquv_profile = cube.pol_profile
 
@@ -90,6 +93,7 @@ def get_bias_corrected_pol_profile(
     return iquv_profile, l_true, pa, p0_l, p0_v, sigma_i
 
 
+# TODO: Format docstring
 def lookup_sigma_pa(p0_meas: NDArray) -> NDArray:
     """Get the analytical uncertainty in a position angle measurement given
     the polarisation measure p0.
@@ -98,8 +102,8 @@ def lookup_sigma_pa(p0_meas: NDArray) -> NDArray:
     ----------
     p0_meas : `NDArray`
         An array of p0 values, where p0 = L_true / sigma_I, L_true is the
-        debiased intensity of linear polarisation and sigma_I is the offpulse
-        noise in the Stokes I profile.
+        debiased intensity of linear polarisation and sigma_I is the
+        offpulse noise in the Stokes I profile.
 
     Returns
     -------
@@ -113,6 +117,7 @@ def lookup_sigma_pa(p0_meas: NDArray) -> NDArray:
     return sigma_meas
 
 
+# TODO: Format docstring
 def compute_sigma_pa_table(
     pa_true: float = 0.0,
     p0_min: float = 0.0,
@@ -124,9 +129,9 @@ def compute_sigma_pa_table(
 ) -> None:
     """Compute the analytical distribution of position angles for an array
     of polarisation measures between p0_min and p0_max in steps of p0_step.
-    Then find the integration limits that contain 68.26% of the distribution
-    by looping through sigma_pa_num steps and integrating between the PA
-    limits +/-(pi/2)/sigma_pa_num.
+    Then find the integration limits that contain 68.26% of the
+    distribution by looping through sigma_pa_num steps and integrating
+    between the PA limits +/-(pi/2)/sigma_pa_num.
 
     For further details see Naghizadeh-Khouei and Clarke (1993):
     https://ui.adsabs.harvard.edu/abs/1993A%26A...274..968N/abstract
@@ -144,7 +149,8 @@ def compute_sigma_pa_table(
     sigma_pa_num : `int`, optional
         The number of steps to use to find sigma_pa. Default: 1000.
     savename : `str`, optional
-        The name of the output table (without extension). Default: "sigma_pa_table".
+        The name of the output table (without extension).
+        Default: "sigma_pa_table".
     make_plot : `bool`, optional
         Make a plot of the results. Default: `False`.
     """
@@ -180,11 +186,12 @@ def compute_sigma_pa_table(
     np.save(savename, sigma_pa_table)
 
 
+# TODO: Format docstring
 def pa_dist(
     pa: NDArray[np.float64], pa_true: np.float64, p0: np.float64
 ) -> NDArray[np.float64]:
-    """Calculate the position angle distribution for low signal-to-noise ratio
-    measurements. See from Naghizadeh-Khouei and Clarke (1993).
+    """Calculate the position angle distribution for low signal-to-noise
+    ratio measurements. See from Naghizadeh-Khouei and Clarke (1993).
 
     Parameters
     ----------
@@ -206,6 +213,7 @@ def pa_dist(
     return G_pa
 
 
+# TODO: Format docstring
 def get_delta_vi(
     cube: psrutils.StokesCube, onpulse_bins: NDArray | None = None
 ) -> NDArray:
@@ -216,7 +224,8 @@ def get_delta_vi(
     cube : `psrutils.StokesCube`
         A StokesCube object.
     onpulse_bins : `NDArray`, optional
-        A list of bins corresponding to the on-pulse region. Default: `None`.
+        A list of bins corresponding to the on-pulse region.
+        Default: `None`.
 
     Returns
     -------
