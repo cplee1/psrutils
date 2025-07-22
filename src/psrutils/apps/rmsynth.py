@@ -137,7 +137,7 @@ def main(
     # sensible, but this needs to be accounted for when accessing the
     # measured values later (e.g. noise_est)
     peak_flux = np.max(cube.profile)
-    profile = psrutils.Profile(cube.profile / peak_flux)
+    profile = psrutils.SplineProfile(cube.profile / peak_flux)
     profile.bootstrap_onpulse_regions()
 
     if meas_widths:

@@ -10,6 +10,8 @@ from numpy.typing import NDArray
 from psrchive import Archive
 from scipy.constants import speed_of_light
 
+from .profile import SplineProfile
+
 __all__ = ["StokesCube"]
 
 logger = logging.getLogger(__name__)
@@ -32,10 +34,13 @@ class StokesCube(object):
         Average in phase to this number of bins.
     rotate_phase : float or None, default: None
         Rotate in phase by this many rotations.
+    dedisperse : bool, default: True
+        Dedisperse the archive.
 
     Attributes
     ----------
     ctr_freq
+    bandwidth
     min_freq
     max_freq
     freqs
@@ -54,6 +59,7 @@ class StokesCube(object):
     mean_subbands
     pol_profile
     profile
+    spline_profile
     snr
     source
     """
@@ -66,6 +72,7 @@ class StokesCube(object):
         fscrunch: int | None = None,
         bscrunch: int | None = None,
         rotate_phase: float | None = None,
+        dedisperse: bool = True,
     ) -> None:
         """Create a StokesCube from a PSRCHIVE Archive.
 
@@ -86,8 +93,8 @@ class StokesCube(object):
         if self._archive.get_state() != "Stokes" and self._archive.get_npol() == 4:
             self._archive.convert_state("Stokes")
 
-        # Ensure the archive is dedispersed
-        if not self._archive.get_dedispersed():
+        # By default, ensure the archive is dedispersed
+        if dedisperse and not self._archive.get_dedispersed():
             self._archive.dedisperse()
 
         # Must remove the baseline before downsampling
@@ -112,6 +119,11 @@ class StokesCube(object):
     def ctr_freq(self) -> float:
         """float: Centre frequency in MHz."""
         return self._archive.get_centre_frequency()
+
+    @property
+    def bandwidth(self) -> float:
+        """float: Bandwidth in MHz."""
+        return self._archive.get_bandwidth()
 
     @property
     def min_freq(self) -> float:
@@ -233,6 +245,12 @@ class StokesCube(object):
         return tmp_archive.get_data()[0, 0, 0, :]
 
     @property
+    def spline_profile(self) -> SplineProfile:
+        """SplineProfile: The Stokes I profile stored as a SplineProfile
+        object."""
+        return SplineProfile(self.profile)
+
+    @property
     def snr(self) -> float:
         """float: The S/N of the integrated Stokes I profile calculated by
         PSRCHIVE."""
@@ -256,7 +274,8 @@ class StokesCube(object):
         nbin : int
             The number of phase bins to downsample to.
         """
-        self._archive.bscrunch_to_nbin(nbin)
+        if nbin < self._archive.get_nbin():
+            self._archive.bscrunch_to_nbin(nbin)
 
     def rotate_phase(self, phase: float) -> None:
         """Rotate along the phase axis.

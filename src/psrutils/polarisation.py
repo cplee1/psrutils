@@ -64,7 +64,7 @@ def get_bias_corrected_pol_profile(
         return iquv_profile, None, None, None, None, None
 
     # Get the indices of the offpulse bins
-    profile = psrutils.Profile(cube.profile)
+    profile = psrutils.SplineProfile(cube.profile)
     profile.bootstrap_onpulse_regions()
     sigma_i = profile.noise_est
 

@@ -14,13 +14,13 @@ from numpy.typing import ArrayLike, NDArray
 from scipy.interpolate import BSpline, PPoly, splrep
 from scipy.stats import normaltest
 
-__all__ = ["Profile", "get_profile_mask_from_pairs", "get_offpulse_from_onpulse"]
+__all__ = ["SplineProfile", "get_profile_mask_from_pairs", "get_offpulse_from_onpulse"]
 
 logger = logging.getLogger(__name__)
 
 
 # TODO: Format docstrings
-class Profile(object):
+class SplineProfile(object):
     """A class for storing and analysing a pulse profile"""
 
     def __init__(self, profile: ArrayLike) -> None:
@@ -65,6 +65,13 @@ class Profile(object):
         return self._bins / (self._nbin - 1)
 
     @property
+    def bspl(self) -> BSpline:
+        """The spline fit to the pulse profile as a BSPpline object."""
+        if not hasattr(self, "_bspl") or self._bspl is None:
+            raise AttributeError("The spline fit has not been computed")
+        return self._bspl
+
+    @property
     def ppoly(self) -> PPoly:
         """The spline fit to the pulse profile as a PPoly object."""
         if not hasattr(self, "_ppoly") or self._ppoly is None:
@@ -72,11 +79,23 @@ class Profile(object):
         return self._ppoly
 
     @property
+    def residuals(self) -> NDArray[np.float_]:
+        """The real profile subtract the smoothed profile."""
+        if not hasattr(self, "_bspl") or self._bspl is None:
+            raise AttributeError("The spline fit has not been computed")
+        return self._prof - self._bspl(self._bins)
+
+    @property
     def noise_est(self) -> np.float_:
         """An estimate of the standard deviation of the offpulse noise."""
-        if not hasattr(self, "_noise_est") or self._noise_est is None:
-            self.get_simple_noise_est()
-        return self._noise_est
+        mask = get_profile_mask_from_pairs(self._nbin, self.overest_onpulse_pairs)
+        return np.std(self._prof[mask])
+
+    @property
+    def baseline_est(self) -> np.float_:
+        """An estimate of the mean of the offpulse noise"""
+        mask = get_profile_mask_from_pairs(self._nbin, self.offpulse_pairs)
+        return np.mean(self._prof[mask])
 
     @property
     def underest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
@@ -183,17 +202,8 @@ class Profile(object):
 
         return left_idx, right_idx
 
-    def get_simple_noise_est(self) -> np.float_:
-        """Get an estimate of the standard deviation of the offpulse noise
-        using the sliding window
-        method.
-
-        Returns
-        -------
-        noise_est : `float`
-            The standard deviation of the profile within the minimised
-            sliding window.
-        """
+    # TODO: Make docstring
+    def get_simple_noise_stats(self) -> tuple[np.float_, np.float_]:
         # Find the window with the minimum integrated flux within it
         op_l, op_r = self.get_opt_pulse_window()
 
@@ -208,7 +218,7 @@ class Profile(object):
             )
         offpulse = self._prof[mask]
 
-        return np.std(offpulse)
+        return np.mean(offpulse), np.std(offpulse)
 
     def fit_spline(self, sigma: float, k: int = 5) -> None:
         """Fit a periodic smoothing spline with a smoothness equal to
@@ -270,7 +280,7 @@ class Profile(object):
             An estimate of the standard deviation of the offpulse noise
             that will be used to determine if a pulse peak exceeds the
             sigma cutoff. If `None` is given, then the noise will be
-            estimated using the `get_simple_noise_est()` method.
+            estimated using the `get_simple_noise_stats()` method.
             Default: `None`.
         sigma_cutoff : `float`, optional
             The number of standard deviations above which a peak will be
@@ -291,7 +301,7 @@ class Profile(object):
             A list of all profile minima in bin units.
         """
         if noise_est is None:
-            noise_est = self.get_simple_noise_est()
+            noise_est = self.get_simple_noise_stats()[1]
 
         # This will update the non-public spline attributes
         self.fit_spline(noise_est)
@@ -364,7 +374,7 @@ class Profile(object):
         """
         logger.debug("Bootstrapping to estimate onpulse...")
 
-        old_noise_est = self.get_simple_noise_est()
+        old_noise_est = self.get_simple_noise_stats()[1]
         logger.debug(f"Initial noise estimate: {old_noise_est}")
 
         underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
@@ -657,7 +667,7 @@ class Profile(object):
         stairs_kwargs = dict(lw=lw, edgecolor="w", fill=True)
 
         # Residual profile
-        res = self._prof - self._bspl(self._bins)
+        res = self.residuals
         _, p = normaltest(res)
         hb = histogram(res, **hist_kwargs)
         axRM.stairs(
