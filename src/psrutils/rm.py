@@ -15,10 +15,15 @@ from astropy.visualization import hist, quantity_support, time_support
 from numpy.typing import NDArray
 from psrqpy import QueryATNF
 from scipy.optimize import curve_fit
-from spinifex import get_rm
 from tqdm import trange
 
 import psrutils
+
+try:
+    from spinifex import get_rm
+except ImportError as e:
+    MSG = "spinifex is not installed. To get ionospheric RM, install psrutils[iono]."
+    raise ImportError(MSG) from e
 
 __all__ = ["rm_synthesis", "rm_clean", "get_rm_iono"]
 
