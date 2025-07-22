@@ -1,6 +1,8 @@
 import logging
+from typing import Any
 
 import click
+import rtoml
 from requests.exceptions import HTTPError
 
 import psrutils
@@ -23,6 +25,9 @@ logger = logging.getLogger(__name__)
 def main(archive: str, log_level: str) -> None:
     psrutils.setup_logger("psrutils", log_level)
 
+    # Initialise a dictionary to store the various results
+    results: dict[str, Any] = {}
+
     # We only need the archive for the metadata, so scrunch
     logger.info(f"Loading archive: {archive}")
     cube = psrutils.StokesCube.from_psrchive(archive, False, 1, 1, None, None)
@@ -36,4 +41,10 @@ def main(archive: str, log_level: str) -> None:
     except HTTPError as e:
         logger.error(e)
 
-    return
+    logger.info(f"RM_iono = {rm_iono:.3f}+/-{rm_iono_err:.3f} rad/m2")
+    results["RM_iono"] = rm_iono
+    results["RM_iono_unc"] = rm_iono_err
+
+    logger.info(f"Saving results: {cube.source}_rmiono_results.toml")
+    with open(f"{cube.source}_rmiono_results.toml", "w") as f:
+        rtoml.dump(psrutils.pythonise(results), f)

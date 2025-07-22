@@ -26,6 +26,7 @@ dependencies = [
 [project.scripts]
 pu-plot = "psrutils.apps.plot:main"
 pu-rmsynth = "psrutils.apps.rmsynth:main"
+pu-rmiono = "psrutils.apps.rmiono:main"
 
 [build-system]
 requires = ["setuptools>=75.8"]

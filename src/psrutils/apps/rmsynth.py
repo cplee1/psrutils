@@ -322,6 +322,6 @@ def main(
         except HTTPError as e:
             logger.error(e)
 
-    logger.info(f"Saving results: {cube.source}_rm_results.toml")
-    with open(f"{cube.source}_rm_results.toml", "w") as f:
+    logger.info(f"Saving results: {cube.source}_rmsynth_results.toml")
+    with open(f"{cube.source}_rmsynth_results.toml", "w") as f:
         rtoml.dump(psrutils.pythonise(results), f)
