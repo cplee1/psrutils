@@ -1,3 +1,7 @@
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 import logging
 from typing import Tuple
 
@@ -8,6 +12,7 @@ import scipy.stats as st
 from astropy.coordinates import EarthLocation, SkyCoord
 from astropy.time import Time
 from astropy.visualization import hist, quantity_support, time_support
+from numpy.typing import NDArray
 from psrqpy import QueryATNF
 from scipy.optimize import curve_fit
 from spinifex import get_rm
@@ -20,19 +25,20 @@ __all__ = ["rm_synthesis", "rm_clean", "get_rm_iono"]
 logger = logging.getLogger(__name__)
 
 
-def _fit_linear_model(freqs: np.ndarray, amps: np.ndarray) -> np.ndarray:
+# TODO: Format docstring
+def _fit_linear_model(freqs: NDArray, amps: NDArray) -> NDArray:
     """Fit a linear model to spectral data.
 
     Parameters
     ----------
-    freqs : `np.ndarray`
+    freqs : `NDArray`
         A list of frequencies.
-    amps : `np.ndarray`
+    amps : `NDArray`
         A list of amplitudes corresponding to each frequency.
 
     Returns
     -------
-    model : `np.ndarray`
+    model : `NDArray`
         The fitted linear model evaluated at the given frequencies.
     """
     try:
@@ -50,18 +56,19 @@ def _fit_linear_model(freqs: np.ndarray, amps: np.ndarray) -> np.ndarray:
     return model
 
 
+# TODO: Format docstring
 def _normalise_spectrum(
-    P: np.ndarray, S: np.ndarray, freqs: np.ndarray, norm: str | None = None
-) -> np.ndarray:
+    P: NDArray, S: NDArray, freqs: NDArray, norm: str | None = None
+) -> NDArray:
     """Normalise the complex linear polarisation by Stokes I.
 
     Parameters
     ----------
-    P : `np.ndarray`
+    P : `NDArray`
         The complex linear polarisation.
-    S : `np.ndarray`
+    S : `NDArray`
         The Stokes I values for each frequency.
-    freqs : `np.ndarray`
+    freqs : `NDArray`
         The frequencies of each channel.
     norm : `str`, optional
         norm : `str`, optional
@@ -72,9 +79,9 @@ def _normalise_spectrum(
 
     Returns
     -------
-    p : `np.ndarray`
+    p : `NDArray`
         The normalised complex linear polarisation.
-    model : `np.ndarray`
+    model : `NDArray`
         The model used, evalued at each frequency.
     """
     if norm is None:
@@ -89,7 +96,8 @@ def _normalise_spectrum(
     return P / model, model
 
 
-def _measure_rm(phi: np.ndarray, fdf_amp: np.ndarray) -> Tuple[float, float]:
+# TODO: Format docstring
+def _measure_rm(phi: NDArray, fdf_amp: NDArray) -> Tuple[float, float]:
     """Measure the RM and its statistical uncertainty from a FDF.
 
     If both 'res' and 'rmsf_fwhm' are provided, will compute analytic uncertainty
@@ -97,9 +105,9 @@ def _measure_rm(phi: np.ndarray, fdf_amp: np.ndarray) -> Tuple[float, float]:
 
     Parameters
     ----------
-    phi : `np.ndarray`
+    phi : `NDArray`
         An array of Faraday depths (in rad/m^2) at which the FDF is computed.
-    fdf_amp : `np.ndarray`
+    fdf_amp : `NDArray`
         The amplitude of the Faraday dispersion function.
 
     Returns
@@ -123,7 +131,10 @@ def _measure_rm(phi: np.ndarray, fdf_amp: np.ndarray) -> Tuple[float, float]:
     return fdf_peak_rm, fdf_peak_amp
 
 
-def _measure_rm_unc_analytic(fdf_peak_amp: float, rmsf_fwhm: float, noise: np.ndarray) -> float:
+# TODO: Format docstring
+def _measure_rm_unc_analytic(
+    fdf_peak_amp: float, rmsf_fwhm: float, noise: NDArray
+) -> float:
     """Compute the analytic uncertainty on the RM.
 
     Parameters
@@ -132,7 +143,7 @@ def _measure_rm_unc_analytic(fdf_peak_amp: float, rmsf_fwhm: float, noise: np.nd
         The amplitude at the peak of the FDF.
     rmsf_fwhm : `float`
         The FWHM of the RM spread function.
-    noise : `np.ndarray`
+    noise : `NDArray`
         An array of amplitudes to use to compute the noise level.
 
     Returns
@@ -144,15 +155,16 @@ def _measure_rm_unc_analytic(fdf_peak_amp: float, rmsf_fwhm: float, noise: np.nd
     return rmsf_fwhm / (2.355 * fdf_snr)
 
 
+# TODO: Format docstring
 def rm_synthesis(
     cube: psrutils.StokesCube,
-    phi: np.ndarray,
+    phi: NDArray,
     norm: str | None = None,
     meas_rm_prof: bool = False,
     meas_rm_scat: bool = False,
     bootstrap_nsamp: int | None = None,
-    onpulse_bins: np.ndarray | None = None,
-    offpulse_bins: np.ndarray | None = None,
+    onpulse_bins: NDArray | None = None,
+    offpulse_bins: NDArray | None = None,
 ) -> None:
     """Perform RM-synthesis for each phase bin.
 
@@ -160,7 +172,7 @@ def rm_synthesis(
     ----------
     cube : `psrutils.StokesCube`
         A StokesCube object.
-    phi : `np.ndarray`
+    phi : `NDArray`
         An array of Faraday depths (in rad/m^2) to compute.
     norm : `str`, optional
         Spectral model subtraction method.
@@ -173,9 +185,10 @@ def rm_synthesis(
         Measure RM_scat. Default: `False`.
     boostrap_nsamp : `int`, optional
         Number of bootstrap iterations. Default: `None`.
-    onpulse_bins : `np.ndarray`
-        A list of bins corresponding to the onpulse region. Default: `None`.
-    offpulse_bins : `np.ndarray`, optional
+    onpulse_bins : `NDArray`
+        A list of bins corresponding to the onpulse region.
+        Default: `None`.
+    offpulse_bins : `NDArray`, optional
         The bin indices of the offpulse window. Default: `None`.
     """
     # Compute squared wavelengths and reference squared wavelength
@@ -200,7 +213,12 @@ def rm_synthesis(
 
     # Store for later use
     rm_stats = dict(
-        dl2=dl2, dphi=dphi, max_rm=max_rm, max_scale=max_scale, span_l2=span_l2, rmsf_fwhm=rmsf_fwhm
+        dl2=dl2,
+        dphi=dphi,
+        max_rm=max_rm,
+        max_scale=max_scale,
+        span_l2=span_l2,
+        rmsf_fwhm=rmsf_fwhm,
     )
 
     # Compute the Faraday depths to evaluate the RMSF at
@@ -240,7 +258,9 @@ def rm_synthesis(
         u_std = np.median(masked_data[2].std(0))
         logger.debug(f"std(U) ~ {u_std}")
 
-        rm_phi_samples = np.empty(shape=(cube.num_bin, bootstrap_nsamp), dtype=np.float64)
+        rm_phi_samples = np.empty(
+            shape=(cube.num_bin, bootstrap_nsamp), dtype=np.float64
+        )
         rm_prof_samples = np.empty(bootstrap_nsamp, dtype=np.float64)
         rm_scat_samples = np.empty(bootstrap_nsamp, dtype=np.float64)
     else:
@@ -280,7 +300,9 @@ def rm_synthesis(
                     K = 1.0 / np.sum(W)
                     Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                     U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                    P, model = _normalise_spectrum(Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm)
+                    P, model = _normalise_spectrum(
+                        Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm
+                    )
                     tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                     tmp_prof_fdf += np.abs(tmp_fdf)
                 tmp_prof_fdf /= len(onpulse_bins)
@@ -292,7 +314,7 @@ def rm_synthesis(
 
     if meas_rm_scat:
         logger.info("Computing RM_scat...")
-        S = cube.mean_subband  # -> dim=(pol,freq)
+        S = cube.mean_subbands  # -> dim=(pol,freq)
         W = np.where(S[0] == 0.0, 0.0, 1.0)  # Uniform weights
         K = 1.0 / np.sum(W)
         if type(bootstrap_nsamp) is int:
@@ -300,7 +322,9 @@ def rm_synthesis(
             for iter in trange(bootstrap_nsamp):
                 Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                 U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                P, model = _normalise_spectrum(Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm)
+                P, model = _normalise_spectrum(
+                    Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm
+                )
                 tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                 rm_scat_samples[iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
         else:
@@ -310,27 +334,36 @@ def rm_synthesis(
     else:
         rm_scat_samples = None
 
-    return fdf, rmsf, rmsf_phi, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats
+    return (
+        fdf,
+        rmsf,
+        rmsf_phi,
+        rm_phi_samples,
+        rm_prof_samples,
+        rm_scat_samples,
+        rm_stats,
+    )
 
 
+# TODO: Format docstring
 def _rm_clean_1d(
-    phi: np.ndarray,
-    fdf: np.ndarray,
-    rmsf: np.ndarray,
+    phi: NDArray,
+    fdf: NDArray,
+    rmsf: NDArray,
     rmsf_fwhm: float,
     niter: int = 2000,
     gain: float = 0.1,
     cutoff: float = 3.0,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
     """Deconvolve the RMSF from the FDF using the RM-CLEAN algorithm.
 
     Parameters
     ----------
-    phi : `np.ndarray`
+    phi : `NDArray`
         The Faraday depths at which the FDF is computed.
-    fdf : `np.ndarray`
+    fdf : `NDArray`
         The Faraday dispersion function.
-    rmsf : `np.ndarray`
+    rmsf : `NDArray`
         The RM spread function.
     rmsf_fwhm : `float`
         The full width at half maximum of the RMSF.
@@ -381,24 +414,25 @@ def _rm_clean_1d(
     return cln_fdf, cln_model, modcomp, res
 
 
+# TODO: Format docstring
 def rm_clean(
-    phi: np.ndarray,
-    fdf: np.ndarray,
-    rmsf: np.ndarray,
+    phi: NDArray,
+    fdf: NDArray,
+    rmsf: NDArray,
     rmsf_fwhm: float,
     niter: int = 2000,
     gain: float = 0.1,
     cutoff: float = 3.0,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[NDArray, NDArray, NDArray, NDArray]:
     """Deconvolve the RMSF from the FDF using the RM-CLEAN algorithm.
 
     Parameters
     ----------
-    phi : `np.ndarray`
+    phi : `NDArray`
         The Faraday depths at which the FDF is computed.
-    fdf : `np.ndarray`
+    fdf : `NDArray`
         The Faraday dispersion function.
-    rmsf : `np.ndarray`
+    rmsf : `NDArray`
         The RM spread function.
     rmsf_fwhm : `float`
         The full width at half maximum of the RMSF.
@@ -419,14 +453,19 @@ def rm_clean(
         cln_fdf[:], cln_model[:], cln_comps[:], cln_res[:] = rmcln_result
     elif fdf.ndim == 2:
         for bin in range(fdf.shape[0]):
-            rmcln_result = _rm_clean_1d(phi, fdf[bin], rmsf[bin], rmsf_fwhm, niter, gain, cutoff)
-            cln_fdf[bin, :], cln_model[bin, :], cln_comps[bin, :], cln_res[bin, :] = rmcln_result
+            rmcln_result = _rm_clean_1d(
+                phi, fdf[bin], rmsf[bin], rmsf_fwhm, niter, gain, cutoff
+            )
+            cln_fdf[bin, :], cln_model[bin, :], cln_comps[bin, :], cln_res[bin, :] = (
+                rmcln_result
+            )
     else:
         raise ValueError("The FDF must have dimensions of (phi) or (phase, phi).")
 
     return cln_fdf, cln_model, cln_comps, cln_res
 
 
+# TODO: Format docstring
 def get_rm_iono(
     cube: psrutils.StokesCube,
     bootstrap_nsamp: int | None = None,
@@ -441,8 +480,9 @@ def get_rm_iono(
     cube : `psrutils.StokesCube`
         A StokesCube object.
     bootstrap_nsamp : `int | None`, optional
-        The number of bootstrap iteration to use to find the mean ionospheric RM. If `None` is
-        provided, then no bootstrapping will be performed. Default: `None`.
+        The number of bootstrap iteration to use to find the mean
+        ionospheric RM. If `None` is provided, then no bootstrapping will
+        be performed. Default: `None`.
     prefix : `str`, optional
         The analysis centre prefix. Default: "jpl".
     server : `str`, optional
@@ -455,9 +495,12 @@ def get_rm_iono(
     rm : `np.float_`
         The mean ionospheric RM during the observation.
     rm_err : `np.float_`
-        The standard deviation of the mean ionospheric RM during the observation.
+        The standard deviation of the mean ionospheric RM during the
+        observation.
     """
-    mwa_loc = EarthLocation(lat=-26.703319 * u.deg, lon=116.67081 * u.deg, height=377.827 * u.m)
+    mwa_loc = EarthLocation(
+        lat=-26.703319 * u.deg, lon=116.67081 * u.deg, height=377.827 * u.m
+    )
     times = Time(cube.start_mjd, format="mjd") + np.linspace(0, cube.int_time, 10) * u.s
     query = QueryATNF(psrs=cube.source, params=["RAJD", "DECJD"])
     psr = query.get_pulsar(cube.source)
@@ -486,9 +529,19 @@ def get_rm_iono(
         with time_support(), quantity_support():
             if bootstrap_nsamp:
                 fig, (ax_rm, ax_hist) = plt.subplots(
-                    ncols=2, figsize=(8, 5), tight_layout=True, sharey=True, width_ratios=(3, 1)
+                    ncols=2,
+                    figsize=(8, 5),
+                    tight_layout=True,
+                    sharey=True,
+                    width_ratios=(3, 1),
                 )
-                hist(rm_samples, bins="knuth", ax=ax_hist, density=True, orientation="horizontal")
+                hist(
+                    rm_samples,
+                    bins="knuth",
+                    ax=ax_hist,
+                    density=True,
+                    orientation="horizontal",
+                )
                 ax_hist.set_xlabel("Probability Density")
                 psrutils.format_ticks(ax_hist)
             else:
@@ -496,7 +549,9 @@ def get_rm_iono(
 
             ax_rm.errorbar(rm.times.datetime, rm.rm, rm.rm_error, fmt="ko")
             ax_rm.axhline(rm_val, linestyle="--", color="k", linewidth=1, alpha=0.3)
-            ax_rm.set_ylabel("$\mathrm{RM}_\mathrm{iono}$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+            ax_rm.set_ylabel(
+                "$\mathrm{RM}_\mathrm{iono}$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]"
+            )
             ax_rm.set_xlabel("UTC Date")
             psrutils.format_ticks(ax_rm)
             ax_rm.set_xticklabels(ax_rm.get_xticklabels(), rotation=30)

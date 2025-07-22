@@ -1,4 +1,7 @@
-import builtins
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 from typing import Any
 
 import numpy as np
@@ -6,36 +9,36 @@ import numpy as np
 __all__ = ["pythonise"]
 
 
-def pythonise(input: Any) -> Any:
-    """Convert numpy types to builtin types using recursion.
+def pythonise(var: Any) -> Any:
+    """Convert numpy types to builtin types.
 
     Parameters
     ----------
-    input : `Any`
-        A number, iterator, or dictionary.
+    var : Any
+        A number or iterator.
 
     Returns
     -------
-    output : `Any`
-        A number, iterator, or dictionary containing only builtin types.
+    Any
+        The input variable cast into builtin types.
     """
-    match type(input):
-        case np.bool_:
-            output = bool(input)
-        case np.int_ | np.int32:
-            output = int(input)
-        case np.float_ | np.int32:
-            output = float(input)
-        case np.str_:
-            output = str(input)
-        case builtins.tuple:
-            output = tuple(pythonise(item) for item in input)
-        case builtins.list:
-            output = [pythonise(item) for item in input]
-        case builtins.dict:
-            output = {key: pythonise(val) for (key, val) in input.items()}
-        case np.ndarray:
-            output = pythonise(input.tolist())
+    match var:
+        case np.bool_():
+            output = bool(var)
+        case np.integer():
+            output = int(var)
+        case np.floating():
+            output = float(var)
+        case np.str_():
+            output = str(var)
+        case tuple():
+            output = tuple(pythonise(item) for item in var)
+        case list():
+            output = [pythonise(item) for item in var]
+        case dict():
+            output = {key: pythonise(val) for (key, val) in var.items()}
+        case np.ndarray():
+            output = pythonise(var.tolist())
         case _:
-            output = input
+            output = var
     return output

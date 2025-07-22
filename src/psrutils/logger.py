@@ -1,8 +1,13 @@
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 import logging
+from typing import cast
 
 __all__ = ["log_levels", "setup_logger"]
 
-log_levels = dict(
+log_levels: dict = dict(
     DEBUG=logging.DEBUG,
     INFO=logging.INFO,
     WARNING=logging.WARNING,
@@ -12,9 +17,19 @@ log_levels = dict(
 
 
 def setup_logger(name: str | None = None, log_level: str | int = "INFO") -> None:
-    if type(log_level) is str:
-        # Convert from str to int representation
-        log_level = log_levels.get(log_level.upper())
+    """Clear all previous handlers and add a new custom stream handler.
+
+    Parameters
+    ----------
+    name : str or None, default: None
+        The name of the logger. Note that `None` returns the root logger.
+    log_level : str or int, default: "INFO"
+        The name of the logging level or the effective logging level.
+    """
+    # If a string was provided, map it to the effective level
+    if isinstance(log_level, str):
+        log_level = log_levels[log_level.upper()]
+    cast(int, log_level)
 
     # Get the logger
     logger = logging.getLogger(name)

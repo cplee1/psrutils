@@ -1,3 +1,7 @@
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 from typing import Tuple
 
 import click
@@ -19,8 +23,12 @@ import psrutils
 @click.option("-Y", "plot_tvsp", is_flag=True, help="Plot a time vs phase.")
 @click.option("-G", "plot_fvsp", is_flag=True, help="Plot a frequency vs phase.")
 @click.option("-D", "plot_prof", is_flag=True, help="Plot a pulse profile.")
-@click.option("-S", "plot_pol_prof", is_flag=True, help="Plot a full-Stokes pulse profile.")
-@click.option("-t", "tscr", type=int, help="Tscrunch to this number of sub-integrations.")
+@click.option(
+    "-S", "plot_pol_prof", is_flag=True, help="Plot a full-Stokes pulse profile."
+)
+@click.option(
+    "-t", "tscr", type=int, help="Tscrunch to this number of sub-integrations."
+)
 @click.option("-f", "fscr", type=int, help="Fscrunch to this number of channels.")
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
@@ -41,7 +49,12 @@ def main(
     psrutils.setup_logger("psrutils", log_level)
 
     cube = psrutils.StokesCube.from_psrchive(
-        archive, clone=False, tscrunch=tscr, fscrunch=fscr, bscrunch=bscr, rotate_phase=rotate
+        archive,
+        clone=False,
+        tscrunch=tscr,
+        fscrunch=fscr,
+        bscrunch=bscr,
+        rotate_phase=rotate,
     )
 
     if plot_tvsp:

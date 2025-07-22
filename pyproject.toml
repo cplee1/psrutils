@@ -1,19 +1,24 @@
+########################################################
+# Licensed under the Academic Free License version 3.0 #
+########################################################
+
 [project]
 name = "psrutils"
 version = "0.0.1"
-description = "A collection of Python-based utilities to analyse PSRCHIVE archives."
+description = "A collection of Python-based utilities to analyse pulsar data."
 authors = [
     { name = "Christopher Lee" },
 ]
-license = { text = "MIT License" }
+license = { file = "LICENSE" }
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
 dependencies = [
+    "astropy",
     "click",
     "cmasher",
     "matplotlib",
     "numba",
-    "numpy<2",
+    "numpy>=1.21,<2",
     "scipy",
     "psrqpy",
     "ruff",
@@ -26,6 +31,7 @@ dependencies = [
 [project.scripts]
 pu-plot = "psrutils.apps.plot:main"
 pu-rmsynth = "psrutils.apps.rmsynth:main"
+pu-rmiono = "psrutils.apps.rmiono:main"
 
 [build-system]
 requires = ["setuptools>=75.8"]
@@ -35,7 +41,8 @@ build-backend = "setuptools.build_meta"
 psrutils = ["data/*"]
 
 [tool.ruff]
-line-length = 100
+line-length = 88  # the ruff/Black default
+# note: docstrings should be max 75 characters per the numpydoc standard
 indent-width = 4
 target-version = "py310"
 include = [
