@@ -1,7 +1,7 @@
 # psrutils
 A collection of Python-based utilities to analyse pulsar data.
 
-# Installation
+## Installation
 This package requires Python 3.10+ and PSRCHIVE with Python bindings
 installed. All of the required dependencies can be installed using `conda`.
 For example:
@@ -13,7 +13,7 @@ conda install conda-forge::dspsr
 pip install git+https://github.com/cplee1/psrutils.git
 ```
 
-# Credit
+## Credit
 This repository is open source under the AFL-v3.0 license. A paper
 describing the RM synthesis code is currently under review, and another one
 describing the profile analysis code is in preparation. Until these papers
