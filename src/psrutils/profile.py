@@ -88,7 +88,7 @@ class SplineProfile(object):
     @property
     def noise_est(self) -> np.float_:
         """An estimate of the standard deviation of the offpulse noise."""
-        mask = get_profile_mask_from_pairs(self._nbin, self.overest_onpulse_pairs)
+        mask = get_profile_mask_from_pairs(self._nbin, self.offpulse_pairs)
         return np.std(self._prof[mask])
 
     @property
@@ -397,7 +397,7 @@ class SplineProfile(object):
                 logger.warning("Offpulse and onpulse region cannot be separated")
                 break
 
-            new_noise_est = np.nanstd(self._prof[mask])
+            new_noise_est = np.std(self._prof[mask])
 
             if np.isclose(new_noise_est, 0.0):
                 logger.warning("New noise estimate is zero")
