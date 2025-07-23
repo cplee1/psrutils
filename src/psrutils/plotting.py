@@ -15,8 +15,9 @@ from astropy.visualization import hist
 from matplotlib.axes import Axes
 from numpy.typing import NDArray
 
-import psrutils
-from psrutils import StokesCube
+from .cube import StokesCube
+from .polarisation import PolProfile, get_bias_corrected_pol_profile
+from .profile import get_profile_mask_from_pairs
 
 __all__ = [
     "centre_offset_degrees",
@@ -71,85 +72,94 @@ def format_ticks(ax: Axes) -> None:
 # TODO: Make docstring
 def add_profile_to_axes(
     cube: StokesCube,
-    ax_pa: Axes | None = None,
+    ax: Axes | None = None,
+    normalise: bool = True,
+    voffset: float = 0.0,
+    bin_func: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
+    **plot_kwargs,
+) -> tuple[NDArray[np.float64], NDArray[np.float64]]:
+    # Get an array of bins in the desired units
+    bins = np.linspace(0, 1, cube.num_bin, dtype=np.float64)
+    if isinstance(bin_func, Callable):
+        bins = bin_func(bins)
+
+    # Normalise by the peak of the profile
+    norm_const: float = 1.0
+    if normalise:
+        norm_const = float(np.max(cube.profile))
+    norm_prof = (cube.profile / norm_const).astype(np.float64)
+
+    ax.plot(bins, norm_prof + voffset, **plot_kwargs)
+
+    return bins, norm_prof
+
+
+# TODO: Make docstring
+def add_pol_profile_to_axes(
+    cube: StokesCube,
     ax_prof: Axes | None = None,
-    normalise_flux: bool = True,
-    plot_pol: bool = True,
+    ax_pa: Axes | None = None,
+    normalise: bool = True,
     p0_cutoff: float | None = 3.0,
     voffset: float = 0.0,
-    lw: float = 0.55,
+    bin_func: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
     I_colour: str = "k",
     L_colour: str = "tab:red",
     V_colour: str = "tab:blue",
     PA_colour: str = "k",
-    alpha: float = 1.0,
-    bin_func: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
-    label: str | None = None,
-) -> tuple[NDArray, tuple]:
-    if plot_pol:
-        profile_data = psrutils.get_bias_corrected_pol_profile(cube)
-        iquv_prof, l_prof, pa, p0_l, p0_v, sigma_i = profile_data
-
-        if l_prof is None:
-            plot_pol = False
-    else:
-        iquv_prof = cube.pol_profile
-        l_prof, pa, p0_l, p0_v, sigma_i = None, None, None, None, None
-
-    bins = np.linspace(0, 1, cube.num_bin)
-
-    # Transforms the bin coordinates from [0,1] -> anything
-    if bin_func is not None:
+    **plot_kwargs,
+) -> tuple[NDArray[np.float64], PolProfile]:
+    # Get an array of bins in the desired units
+    bins = np.linspace(0, 1, cube.num_bin, dtype=np.float64)
+    if isinstance(bin_func, Callable):
         bins = bin_func(bins)
 
-    if normalise_flux:
-        peak_flux = np.max(iquv_prof[0])
-        iquv_prof /= peak_flux
-        if plot_pol:
-            l_prof /= peak_flux
-            sigma_i /= peak_flux
+    # Normalise by the peak of the profile
+    norm_const: float = 1.0
+    if normalise:
+        norm_const = float(np.max(cube.profile))
 
-    if ax_prof is not None:
+    pol_profile = get_bias_corrected_pol_profile(cube)
+
+    if isinstance(ax_prof, Axes):
         ax_prof.plot(
             bins,
-            iquv_prof[0] + voffset,
-            linewidth=lw,
+            pol_profile.iquv[0] / norm_const + voffset,
             linestyle="-",
             color=I_colour,
-            alpha=alpha,
             zorder=8,
+            **plot_kwargs,
         )
-        if plot_pol:
-            ax_prof.plot(
-                bins,
-                l_prof + voffset,
-                linewidth=lw,
-                linestyle="--",
-                color=L_colour,
-                alpha=alpha,
-                zorder=10,
-            )
-            ax_prof.plot(
-                bins,
-                iquv_prof[3] + voffset,
-                linewidth=lw,
-                linestyle=":",
-                color=V_colour,
-                alpha=alpha,
-                zorder=9,
-            )
+        ax_prof.plot(
+            bins,
+            pol_profile.l_true / norm_const + voffset,
+            linestyle="--",
+            color=L_colour,
+            zorder=10,
+            **plot_kwargs,
+        )
+        ax_prof.plot(
+            bins,
+            pol_profile.iquv[3] / norm_const + voffset,
+            linestyle=":",
+            color=V_colour,
+            zorder=9,
+            **plot_kwargs,
+        )
 
-    if ax_pa is not None and plot_pol:
-        pa_mask = p0_l > p0_cutoff
+    if isinstance(ax_pa, Axes):
+        pa_mask = pol_profile.p0_l > p0_cutoff
+        if "linewidth" in plot_kwargs.keys():
+            lw = plot_kwargs["linewidth"]
+        elif "lw" in plot_kwargs.keys():
+            lw = plot_kwargs["lw"]
+        else:
+            lw = None
         for offset in [0, -180, 180]:
-            if offset == 0:
-                ilabel = label
-            else:
-                ilabel = None
             ax_pa.errorbar(
                 x=bins[pa_mask],
-                y=pa[0, pa_mask] + offset,
-                yerr=pa[1, pa_mask],
+                y=pol_profile.pa[0, pa_mask] + offset,
+                yerr=pol_profile.pa[1, pa_mask],
                 ecolor=PA_colour,
                 marker="none",
                 ms=1,
@@ -157,9 +167,10 @@ def add_profile_to_axes(
                 elinewidth=lw,
                 capthick=lw,
                 capsize=0,
-                label=ilabel,
+                **plot_kwargs,
             )
-    return bins, (iquv_prof, l_prof, pa, p0_l, p0_v, sigma_i)
+
+    return bins, pol_profile
 
 
 def plot_profile(
@@ -187,11 +198,10 @@ def plot_profile(
 
     fig, ax = plt.subplots(tight_layout=True)
 
-    bins = np.arange(cube.num_bin) / (cube.num_bin - 1)
-
-    ax.plot(bins, cube.profile, color="k", linewidth=1, label="Profile")
+    bins, _ = add_profile_to_axes(
+        cube, ax, normalise=False, color="k", linewidth=1, label="Profile"
+    )
     ax.axhline(0, linestyle=":", linewidth=1.2, color="k", alpha=0.3)
-
     ax.set_xlim([bins[0], bins[-1]])
     ax.set_xlabel("Pulse Phase")
     ax.set_ylabel("Flux Density [arb. units]")
@@ -302,10 +312,14 @@ def plot_pol_profile(
         phase_range = [0, 1]
 
     # Add flux and PA
-    bins, profile_data = psrutils.add_profile_to_axes(
-        cube, ax_pa=ax_pa, ax_prof=ax_prof, p0_cutoff=p0_cutoff, lw=lw
+    bins, pol_profile = add_pol_profile_to_axes(
+        cube,
+        ax_prof=ax_prof,
+        ax_pa=ax_pa,
+        normalise=False,
+        p0_cutoff=p0_cutoff,
+        linewidth=lw,
     )
-    iquv_prof, l_prof, pa_prof, p0_l, p0_v, sigma_i = profile_data
 
     lw = 0.7
     caplw = 0.7
@@ -324,7 +338,7 @@ def plot_pol_profile(
         if rm_mask is None:
             rm_mask = np.full(rm_phi_qty[0].shape[0], True)
 
-        full_rm_mask = rm_mask & (p0_l > p0_cutoff)
+        full_rm_mask = rm_mask & (pol_profile.p0_l > p0_cutoff)
 
         if rm_phi_qty[1] is not None:
             rm_phi_unc = np.abs(rm_phi_qty[1])[full_rm_mask]
@@ -454,17 +468,17 @@ def plot_pol_profile(
             header3 = f"rm_prof: {rm_prof_qty[0]} +- {rm_prof_qty[1]}"
         else:
             header3 = "rm_prof: nan +- nan"
-        header4 = f"sigma_i: {sigma_i}"
+        header4 = f"sigma_i: {pol_profile.sigma_i}"
         header5 = "bin,I,Q,U,V,L,P0_L,P0_V,PA,PA_err,RM,RM_err,dvi,dvi_err"
         header = "\n".join([header1, header2, header3, header4, header5])
         prof_array = np.empty(shape=(14, cube.num_bin), dtype=np.float64)
         prof_array[0, :] = bins
-        prof_array[1:5, :] = iquv_prof
-        prof_array[5, :] = l_prof
-        prof_array[6, :] = p0_l
-        prof_array[7, :] = p0_v
-        prof_array[8, :] = pa_prof[0]
-        prof_array[9, :] = pa_prof[1]
+        prof_array[1:5, :] = pol_profile.iquv
+        prof_array[5, :] = pol_profile.l_true
+        prof_array[6, :] = pol_profile.p0_l
+        prof_array[7, :] = pol_profile.p0_v
+        prof_array[8, :] = pol_profile.pa[0]
+        prof_array[9, :] = pol_profile.pa[1]
         if plot_rm:
             prof_array[10, :] = np.where(rm_mask, rm_phi_qty[0], None)
             if rm_phi_qty[1] is not None:
@@ -643,9 +657,7 @@ def plot_2d_fdf(
     if rm_prof_qty is not None:
         cube.defaraday(rm_prof_qty[0])
 
-    iquv_prof, l_prof, pa_prof, p0_l, _, _ = psrutils.get_bias_corrected_pol_profile(
-        cube
-    )
+    iquv_prof, l_prof, pa_prof, p0_l, _, _ = get_bias_corrected_pol_profile(cube)
 
     bins = np.linspace(0, 1, cube.num_bin)
 
@@ -656,7 +668,7 @@ def plot_2d_fdf(
     if onpulse_pairs is None:
         fdf_amp_1Dy = fdf_amp_2D.mean(0)
     else:
-        onpulse_mask = psrutils.get_profile_mask_from_pairs(cube.num_bin, onpulse_pairs)
+        onpulse_mask = get_profile_mask_from_pairs(cube.num_bin, onpulse_pairs)
         fdf_amp_1Dy = fdf_amp_2D[onpulse_mask].mean(0)
 
     # Styles
