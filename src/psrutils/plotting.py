@@ -34,11 +34,33 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-def centre_offset_degrees(phase_bins: NDArray) -> NDArray:
+def centre_offset_degrees(phase_bins: NDArray[np.floating]) -> NDArray[np.floating]:
+    """Convert an array of bins from rotations to degrees with a 180 degree
+    phase shift.
+
+    Parameters
+    ----------
+    phase_bins : NDArray[floating]
+        An array of phase bins in units of rotations.
+
+    Returns
+    -------
+    NDArray[floating]
+        An array of phase bins in units of degrees, with a 180 degree
+        phase shift from the input array.
+    """
     return phase_bins * 360 - 180
 
 
 def format_ticks(ax: Axes) -> None:
+    """Format the x and y ticks so that they point inwards and show both
+    major and minor ticks on all four spines.
+
+    Parameters
+    ----------
+    ax : Axes
+        The Axes to update.
+    """
     ax.minorticks_on()
     ax.tick_params(which="both", right=True, top=True)
     ax.tick_params(axis="both", which="both", direction="in")
@@ -46,6 +68,7 @@ def format_ticks(ax: Axes) -> None:
     ax.tick_params(axis="both", which="minor", length=2)
 
 
+# TODO: Make docstring
 def add_profile_to_axes(
     cube: StokesCube,
     ax_pa: Axes | None = None,
@@ -60,7 +83,7 @@ def add_profile_to_axes(
     V_colour: str = "tab:blue",
     PA_colour: str = "k",
     alpha: float = 1.0,
-    bin_func: Callable[[NDArray], NDArray] | None = None,
+    bin_func: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
     label: str | None = None,
 ) -> tuple[NDArray, tuple]:
     if plot_pol:

@@ -7,7 +7,7 @@ from typing import cast
 
 __all__ = ["log_levels", "setup_logger"]
 
-log_levels: dict = dict(
+log_levels: dict[str, int] = dict(
     DEBUG=logging.DEBUG,
     INFO=logging.INFO,
     WARNING=logging.WARNING,
