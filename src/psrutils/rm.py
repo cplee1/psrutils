@@ -239,7 +239,7 @@ def rm_synthesis(
     data = cube.subbands  # -> (pol,freq,phase)
 
     # Generate a mask for the offpulse
-    if offpulse_bins is None:
+    if offpulse_bins is None or onpulse_bins.size == 0:
         # Use the whole profile
         offpulse_mask = np.full(cube.num_bin, True)
     else:
