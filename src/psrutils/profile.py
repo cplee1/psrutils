@@ -698,6 +698,13 @@ class SplineProfile(object):
                         *hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs
                     )
 
+        # Make sure the histograms have the same x-limits
+        xlims_rt = axRT.get_xlim()
+        xlims_rm = axRM.get_xlim()
+        xlims_hist = [min(xlims_rt[0], xlims_rm[0]), max(xlims_rt[1], xlims_rm[1])]
+        axRT.set_xlim(xlims_hist)
+        axRM.set_xlim(xlims_hist)
+
         # Info
         if self._noise_est is not None:
             snr = f"{np.max(self._prof) / self._noise_est:.1f}"
