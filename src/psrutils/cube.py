@@ -143,12 +143,12 @@ class StokesCube(object):
 
     @property
     def freqs(self) -> NDArray[np.float_]:
-        """ndarray[float]: Subband centre frequencies in MHz."""
+        """NDArray[float]: Subband centre frequencies in MHz."""
         return self._archive.get_frequencies() * 1e6
 
     @property
     def lambda_sq(self) -> NDArray[np.float_]:
-        """ndarray[float]: Squared subband centre wavelengths in m^2."""
+        """NDArray[float]: Squared subband centre wavelengths in m^2."""
         freqs = self._archive.get_frequencies() * 1e6
         return (speed_of_light / freqs) ** 2
 
@@ -202,7 +202,7 @@ class StokesCube(object):
 
     @property
     def subints(self) -> NDArray[np.float32]:
-        """ndarray[float32]: The subintegrations obtained by averaging the
+        """NDArray[float32]: The subintegrations obtained by averaging the
         data in frequency. Output has dimensions (time, pol, phase)."""
         tmp_archive = self._archive.clone()
         tmp_archive.fscrunch()
@@ -210,7 +210,7 @@ class StokesCube(object):
 
     @property
     def subbands(self) -> NDArray[np.float32]:
-        """ndarray[float32]: The subbands obtained by averaging the data in
+        """NDArray[float32]: The subbands obtained by averaging the data in
         time. Output has dimensions (pol, freq, phase)."""
         tmp_archive = self._archive.clone()
         tmp_archive.tscrunch()
@@ -218,7 +218,7 @@ class StokesCube(object):
 
     @property
     def mean_subbands(self) -> NDArray[np.float32]:
-        """ndarray[float32]: The subbands obtained by averaging in time and
+        """NDArray[float32]: The subbands obtained by averaging in time and
         phase. Output has dimensions (pol, freq)."""
         tmp_archive = self._archive.clone()
         tmp_archive.tscrunch()
@@ -227,7 +227,7 @@ class StokesCube(object):
 
     @property
     def pol_profile(self) -> NDArray[np.float32]:
-        """ndarray[float32]: The full-Stokes profile obtained by averaging
+        """NDArray[float32]: The full-Stokes profile obtained by averaging
         in frequency and time. Output has dimensions (pol, phase)."""
         tmp_archive = self._archive.clone()
         tmp_archive.fscrunch()
@@ -236,7 +236,7 @@ class StokesCube(object):
 
     @property
     def profile(self) -> NDArray[np.float32]:
-        """ndarray[float32]: The profile obtained by averaging in
+        """NDArray[float32]: The profile obtained by averaging in
         frequency, time, and polarisation. Output is a 1D array."""
         tmp_archive = self._archive.clone()
         tmp_archive.fscrunch()
