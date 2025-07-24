@@ -22,7 +22,6 @@ from .profile import get_profile_mask_from_pairs
 __all__ = [
     "centre_offset_degrees",
     "format_ticks",
-    "add_profile_to_axes",
     "plot_profile",
     "plot_pol_profile",
     "plot_freq_phase",
@@ -70,7 +69,7 @@ def format_ticks(ax: Axes) -> None:
 
 
 # TODO: Make docstring
-def add_profile_to_axes(
+def _add_profile_to_axes(
     cube: StokesCube,
     ax: Axes | None = None,
     normalise: bool = True,
@@ -95,7 +94,7 @@ def add_profile_to_axes(
 
 
 # TODO: Make docstring
-def add_pol_profile_to_axes(
+def _add_pol_profile_to_axes(
     cube: StokesCube,
     ax_prof: Axes | None = None,
     ax_pa: Axes | None = None,
@@ -198,7 +197,7 @@ def plot_profile(
 
     fig, ax = plt.subplots(tight_layout=True)
 
-    bins, _ = add_profile_to_axes(
+    bins, _ = _add_profile_to_axes(
         cube, ax, normalise=False, color="k", linewidth=1, label="Profile"
     )
     ax.axhline(0, linestyle=":", linewidth=1.2, color="k", alpha=0.3)
@@ -312,7 +311,7 @@ def plot_pol_profile(
         phase_range = [0, 1]
 
     # Add flux and PA
-    bins, pol_profile = add_pol_profile_to_axes(
+    bins, pol_profile = _add_pol_profile_to_axes(
         cube,
         ax_prof=ax_prof,
         ax_pa=ax_pa,
@@ -657,14 +656,6 @@ def plot_2d_fdf(
     if rm_prof_qty is not None:
         cube.defaraday(rm_prof_qty[0])
 
-    iquv_prof, l_prof, pa_prof, p0_l, _, _ = get_bias_corrected_pol_profile(cube)
-
-    bins = np.linspace(0, 1, cube.num_bin)
-
-    # Transforms the bin coordinates from [0,1] -> anything
-    if bin_func is not None:
-        bins = bin_func(bins)
-
     if onpulse_pairs is None:
         fdf_amp_1Dy = fdf_amp_2D.mean(0)
     else:
@@ -710,14 +701,16 @@ def plot_2d_fdf(
     ax_fdf_1dy = fig.add_subplot(gs[1, 1])
     ax_fdf_2d = fig.add_subplot(gs[1, 0])
 
-    # Plot profile
-    ax_prof.plot(
-        bins, iquv_prof[0], linewidth=lw, linestyle="-", color=line_col, zorder=8
+    # Plot pulse profile and PA
+    bins, pol_profile = _add_pol_profile_to_axes(
+        cube,
+        ax_prof=ax_prof,
+        ax_pa=ax_pa,
+        normalise=False,
+        p0_cutoff=p0_cutoff,
+        bin_func=bin_func,
+        lw=lw,
     )
-    ax_prof.plot(
-        bins, iquv_prof[3], linewidth=lw, linestyle=":", color="tab:blue", zorder=9
-    )
-    ax_prof.plot(bins, l_prof, linewidth=lw, linestyle="--", color="tab:red", zorder=10)
     ax_prof.text(
         0.03,
         0.91,
@@ -726,14 +719,6 @@ def plot_2d_fdf(
         verticalalignment="top",
         transform=ax_prof.transAxes,
     )
-    # ax_prof.text(
-    #     0.97,
-    #     0.91,
-    #     f"{cube.ctr_freq:.0f} MHz",
-    #     horizontalalignment="right",
-    #     verticalalignment="top",
-    #     transform=ax_prof.transAxes,
-    # )
     if onpulse_pairs is not None and plot_onpulse:
         ylims = ax_prof.get_ylim()
         fill_args = dict(color="tab:blue", alpha=0.3, zorder=0)
@@ -795,7 +780,7 @@ def plot_2d_fdf(
         if rm_mask is None:
             rm_mask = np.full(rm_phi_qty[0].shape[0], True)
 
-        full_rm_mask = rm_mask & (p0_l > p0_cutoff)
+        full_rm_mask = rm_mask & (pol_profile.p0_l > p0_cutoff)
 
         if rm_phi_qty[1] is not None:
             rm_phi_unc = np.abs(rm_phi_qty[1])[full_rm_mask]
@@ -829,23 +814,6 @@ def plot_2d_fdf(
                 mec="none",
                 ms=1.2,
                 linestyle="none",
-            )
-
-    # Position angle vs phase
-    if plot_pa:
-        pa_mask = p0_l > p0_cutoff
-        for offset in [0, -180, 180]:
-            ax_pa.errorbar(
-                x=bins[pa_mask],
-                y=pa_prof[0, pa_mask] + offset,
-                yerr=pa_prof[1, pa_mask],
-                color="k",
-                marker="none",
-                ms=1,
-                linestyle="none",
-                elinewidth=lw,
-                capthick=lw,
-                capsize=0,
             )
 
     # Phase limits

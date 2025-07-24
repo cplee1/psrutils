@@ -269,6 +269,11 @@ def main(
         if save_phase_resolved:
             results["delta_V_I"] = delta_vi
 
+    # If there is no offpulse, then default to using the whole profile
+    onpp = profile.overest_onpulse_pairs
+    if len(onpp) == 1 and onpp[0][0] == onpp[0][1]:
+        onpp = None
+
     psrutils.plotting.plot_2d_fdf(
         cube,
         np.abs(cln_fdf),
@@ -276,7 +281,7 @@ def main(
         rmsf_fwhm=rm_stats["rmsf_fwhm"],
         rm_phi_qty=rm_phi_qty,
         rm_prof_qty=rm_prof_qty,
-        onpulse_pairs=profile.overest_onpulse_pairs,
+        onpulse_pairs=onpp,
         rm_mask=peak_mask,
         cln_comps=cln_comps,
         plot_peaks=peaks,

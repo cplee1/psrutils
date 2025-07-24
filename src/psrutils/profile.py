@@ -2,6 +2,7 @@
 # Licensed under the Academic Free License version 3.0 #
 ########################################################
 
+import bisect
 import itertools
 import logging
 from typing import Iterable
@@ -88,6 +89,8 @@ class SplineProfile(object):
     @property
     def noise_est(self) -> np.float_:
         """An estimate of the standard deviation of the offpulse noise."""
+        if hasattr(self, "_noise_est") and self._noise_est is not None:
+            return self._noise_est
         mask = get_profile_mask_from_pairs(self._nbin, self.offpulse_pairs)
         return np.std(self._prof[mask])
 
@@ -312,7 +315,7 @@ class SplineProfile(object):
             d2_roots = self._d2_ppoly.roots()
         except ValueError:
             logger.error("Roots of spline could not be found.")
-            return None, None, None
+            return None, None, None, None
 
         # Remove out-of-bounds roots
         d1_roots = _get_inbounds_roots(d1_roots, self._lims)
@@ -331,7 +334,7 @@ class SplineProfile(object):
 
         if not true_maxima:
             logger.error(f"No profile maxima found above {sigma_cutoff} sigma.")
-            return None, None, None
+            return None, None, None, None
 
         # The underestimate is defined by the flanking inflections
         underest_onpulse_pairs = _get_flanking_roots(true_maxima, d2_roots)
@@ -420,8 +423,8 @@ class SplineProfile(object):
                 new_noise_est, sigma_cutoff=sigma_cutoff
             )
             if overest_onpp is None or underest_onpp is None:
-                # Roll back the spline attributes to the previous fit
                 logger.warning(f"Bootstrapping failed on trial {trial}")
+                # Roll back the spline attributes to the previous fit
                 self.fit_spline(old_noise_est)
                 break
 
@@ -793,20 +796,20 @@ def _get_flanking_roots(
         A list of pairs of roots around the specified locations.
     """
     pairs = []
+    raw_pairs = []
     for loc in locs:
         # Figure out which two roots flank the maximum
-        roots = sorted(np.append(roots, loc))
-        ridx = roots.index(loc)
-        roots.remove(loc)
-        try:
-            pair = [roots[ridx - 1], roots[ridx]]
-        except IndexError:
-            # The next root is on the other side of the profile
-            if ridx == 0:  # Left side
-                pair = [roots[-1], roots[ridx]]
-            else:  # Right side
-                pair = [roots[ridx - 1], roots[0]]
+        ridx = bisect.bisect_left(roots, loc)
+        lower_idx = (ridx - 1) % len(roots)
+        upper_idx = ridx % len(roots)
+        pair = [roots[lower_idx], roots[upper_idx]]
 
+        # Remove duplicates
+        if pair in raw_pairs:
+            continue
+        raw_pairs.append(pair.copy())
+
+        # Merge adjacent intervals
         if pairs and pair[0] == pairs[-1][1]:
             # If the bounds are touching
             pairs[-1][1] = pair[1]
