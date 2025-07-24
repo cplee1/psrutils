@@ -391,6 +391,7 @@ class SplineProfile(object):
         old_underest_onpp = underest_onpp
         old_maxima = maxima
         old_minima = minima
+        old_tollvl = None
 
         for trial in range(ntrials):
             # Calculate the offpulse noise
@@ -400,18 +401,30 @@ class SplineProfile(object):
                 logger.warning("Offpulse and onpulse region cannot be separated")
                 break
 
-            new_noise_est = np.std(self._prof[mask])
+            # Perform a normal test on the offpulse samples and the spline
+            # residuals, and estimate the noise from whichever one is more
+            # normally distributed
+            if normaltest(self.residuals)[1] > normaltest(self._prof[mask])[1]:
+                logger.debug("Using residuals to estimate noise")
+                new_noise_est = np.std(self.residuals)
+            else:
+                logger.debug("Using offpulse to estimate noise")
+                new_noise_est = np.std(self._prof[mask])
 
             if np.isclose(new_noise_est, 0.0):
                 logger.warning("New noise estimate is zero")
                 break
 
             # Check whether the tolerance level has been reached
-            tollvl = abs((old_noise_est - new_noise_est) / new_noise_est)
-            logger.debug(f"Trial {trial}: {new_noise_est=} {tollvl=}")
+            new_tollvl = abs((old_noise_est - new_noise_est) / new_noise_est)
+            logger.debug(f"Trial {trial + 1}: {new_noise_est=} {new_tollvl=}")
 
-            if tollvl <= tol:
-                logger.debug(f"Took {trial + 1} trials to reach tolerance")
+            if old_tollvl is not None and new_tollvl > old_tollvl:
+                logger.debug(f"Hit tolerance minimum on trial {trial}")
+                break
+
+            if new_tollvl <= tol:
+                logger.debug(f"Reached tolerance on trial {trial + 1}")
                 break
 
             if trial + 1 == ntrials:
@@ -434,6 +447,7 @@ class SplineProfile(object):
             old_maxima = maxima
             old_minima = minima
             old_noise_est = new_noise_est
+            old_tollvl = new_tollvl
 
         self._offpulse_pairs = old_offpp
         self._overest_onpulse_pairs = old_overest_onpp
@@ -482,10 +496,14 @@ class SplineProfile(object):
             roots = _get_inbounds_roots(roots, self._lims)
 
             # There must be an even number of roots
-            assert len(roots) % 2 == 0, f"{len(roots)} is not divisible by 2"
+            try:
+                assert len(roots) % 2 == 0, f"{len(roots)=} is not divisible by 2"
+            except AssertionError as e:
+                logger.error(f"Could not measure pulse widths: {e}")
+                return
 
-            # Match each leading edge root with its corresponding trailin
-            #  edge root
+            # Match each leading edge root with its corresponding trailing
+            # edge root
             root_pairs = []
             current_pair = []
             for ii in range(len(roots)):
@@ -580,7 +598,7 @@ class SplineProfile(object):
         axLT.errorbar(
             xpos,
             ypos,
-            yerr=self._noise_est,
+            yerr=np.std(self.residuals),
             color="k",
             marker="none",
             capsize=3,
@@ -667,43 +685,59 @@ class SplineProfile(object):
 
         # Histograms
         hist_kwargs = dict(bins="knuth", density=False)
-        stairs_kwargs = dict(lw=lw, edgecolor="w", fill=True)
+        stairs_kwargs = dict(lw=lw, fill=True)
+        vline_kwargs = dict(linestyle="--", linewidth=1.4, color="tab:red")
 
-        # Residual profile
+        # Residuals
         res = self.residuals
-        _, p = normaltest(res)
+        p = normaltest(res)[1]
+        mu = np.mean(res)
+        std = np.std(res)
         hb = histogram(res, **hist_kwargs)
-        axRM.stairs(
-            *hb, color="tab:blue", label=f"all: {p=:.3f}", alpha=0.4, **stairs_kwargs
+        axRM.stairs(*hb, color="tab:blue", **stairs_kwargs)
+        axRM.axvline(mu, **vline_kwargs)
+        axRM.text(
+            0.05,
+            0.93,
+            f"$p=${p:.3f}\n$\\mu=${mu:.2E}\n$\\sigma=${std:.2E}",
+            verticalalignment="top",
+            horizontalalignment="left",
+            transform=axRM.transAxes,
+            fontsize=9,
         )
 
+        # Offpulse samples
         noff = 0
         if hasattr(self, "_offpulse_pairs") and self._offpulse_pairs is not None:
             mask = get_profile_mask_from_pairs(self._nbin, self._offpulse_pairs)
             if not np.all(np.logical_not(mask)):
                 noff = len(self._prof[mask])
-
                 if noff > 3:
-                    # Real offpulse
-                    _, p = normaltest(self._prof[mask])
+                    p = normaltest(self._prof[mask])[1]
+                    mu = np.mean(self._prof[mask])
+                    std = np.std(self._prof[mask])
                     hb = histogram(self._prof[mask], **hist_kwargs)
-                    axRT.stairs(
-                        *hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs
+                    axRT.stairs(*hb, color="tab:blue", **stairs_kwargs)
+                    axRT.axvline(mu, **vline_kwargs)
+                    axRT.text(
+                        0.05,
+                        0.93,
+                        f"$p=${p:.3f}\n$\\mu=${mu:.2E}\n$\\sigma=${std:.2E}",
+                        verticalalignment="top",
+                        horizontalalignment="left",
+                        transform=axRT.transAxes,
+                        fontsize=9,
                     )
 
-                    # Residual offpulse
-                    _, p = normaltest(res[mask])
-                    hb = histogram(res[mask], **hist_kwargs)
-                    axRM.stairs(
-                        *hb, color="tab:blue", label=f"off: {p=:.3f}", **stairs_kwargs
-                    )
-
-        # Make sure the histograms have the same x-limits
-        xlims_rt = axRT.get_xlim()
-        xlims_rm = axRM.get_xlim()
-        xlims_hist = [min(xlims_rt[0], xlims_rm[0]), max(xlims_rt[1], xlims_rm[1])]
-        axRT.set_xlim(xlims_hist)
-        axRM.set_xlim(xlims_hist)
+                    # Make sure the histograms have the same x-limits
+                    xlims_rm = axRM.get_xlim()
+                    xlims_rt = axRT.get_xlim()
+                    xlims_hist = [
+                        min(xlims_rt[0], xlims_rm[0]),
+                        max(xlims_rt[1], xlims_rm[1]),
+                    ]
+                    axRT.set_xlim(xlims_hist)
+                    axRM.set_xlim(xlims_hist)
 
         # Info
         if self._noise_est is not None:
@@ -714,12 +748,6 @@ class SplineProfile(object):
         axRB.set_xticks([])
         axRB.set_yticks([])
         axRB.spines[["left", "right", "top", "bottom"]].set_visible(False)
-        text_kwargs = dict(
-            verticalalignment="top",
-            horizontalalignment="left",
-            transform=axRB.transAxes,
-            fontsize=12,
-        )
         lines = [
             f"S/N={snr}",
             f"Nbin={self._nbin}",
@@ -727,18 +755,23 @@ class SplineProfile(object):
             + f"({(self._nbin - noff) / self._nbin * 100:.1f}%)",
             f"Nbin(off)={noff} ({noff / self._nbin * 100:.1f}%)",
         ] + w_info_lines
-        axRB.text(0.0, 1.0, "\n".join(lines), **text_kwargs)
+        axRB.text(
+            0.0,
+            1.0,
+            "\n".join(lines),
+            verticalalignment="top",
+            horizontalalignment="left",
+            transform=axRB.transAxes,
+            fontsize=12,
+        )
 
         # Finishing touches
         axLB.legend(fontsize=9)
-        axRM.legend(fontsize=9, loc="upper right")
-        if noff > 3:
-            axRT.legend(fontsize=9, loc="upper right")
 
         axLT.set_title("Profile", fontsize=12)
         axLM.set_title("Residuals", fontsize=12)
         axLB.set_title("Profile Derivatives", fontsize=12)
-        axRT.set_title("Sample Distribution", fontsize=12)
+        axRT.set_title("Offpulse Sample Distribution", fontsize=12)
         axRM.set_title("Residual Distribution", fontsize=12)
 
         for ax in left_axes:

@@ -143,10 +143,13 @@ def main(
     if meas_widths:
         peak_fracs = [0.5, 0.1]
         profile.measure_pulse_widths(peak_fracs=peak_fracs)
-        for peak_frac in peak_fracs:
-            w_param = f"W{peak_frac * 100:.0f}"
-            if w_param in profile._widths.keys():
-                results[w_param] = [width for _, width in profile._widths[w_param][2]]
+        if hasattr(profile, "_widths"):
+            for peak_frac in peak_fracs:
+                w_param = f"W{peak_frac * 100:.0f}"
+                if w_param in profile._widths.keys():
+                    results[w_param] = [
+                        width for _, width in profile._widths[w_param][2]
+                    ]
 
     profile.plot_diagnostics(
         savename=f"{cube.source}_profile_diagnostics",
