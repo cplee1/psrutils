@@ -46,22 +46,20 @@ class PolProfile(NamedTuple):
     """The standard deviation of the offpulse noise in the Stokes I profile."""
 
 
-def get_bias_corrected_pol_profile(cube: StokesCube) -> PolProfile:
+def get_bias_corrected_pol_profile(iquv: NDArray[np.float64]) -> PolProfile:
     """Get the full-polarisation pulse profile and correct for bias in the
     linear polarisation degree and angle.
 
     Parameters
     ----------
-    cube : StokesCube
-        A StokesCube containing a full-polarisation data archive.
+    iquv : NDArray[float64]
+        The polarisation profile, with dimensions (pol, phase).
 
     Returns
     -------
     PolProfile
         A named tuple containing the full-polarisation pulse profile.
     """
-    iquv = cube.pol_profile.astype(np.float64)
-
     if iquv.shape[0] == 1:
         raise ValueError("Profile does not contain polarisation information.")
 

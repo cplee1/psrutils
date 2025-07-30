@@ -118,7 +118,7 @@ def _add_pol_profile_to_axes(
     if normalise:
         norm_const = float(np.max(cube.profile))
 
-    pol_profile = get_bias_corrected_pol_profile(cube)
+    pol_profile = get_bias_corrected_pol_profile(cube.pol_profile.astype(np.float64))
 
     if isinstance(ax_prof, Axes):
         ax_prof.plot(
