@@ -39,7 +39,7 @@ def main(archive: str, log_level: str) -> None:
     psrutils.setup_logger("spinifex", log_level)
 
     try:
-        rm_iono, rm_iono_err = psrutils.get_rm_iono(
+        rm_iono, rm_iono_err = psrutils.iono.get_rm_iono(
             cube, bootstrap_nsamp=int(1e4), savename=f"{cube.source}_rm_iono"
         )
     except HTTPError as e:

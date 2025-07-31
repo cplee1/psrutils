@@ -6,6 +6,7 @@ from importlib.metadata import version
 
 from matplotlib.pyplot import rcParams
 
+from . import iono as iono
 from .cube import *
 from .kernels import *
 from .logger import *
