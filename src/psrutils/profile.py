@@ -13,7 +13,9 @@ import numpy as np
 from astropy.stats import histogram
 from numpy.typing import ArrayLike, NDArray
 from scipy.interpolate import BSpline, PPoly, splrep
-from scipy.stats import normaltest
+from scipy.stats import combine_pvalues, shapiro
+from statsmodels.sandbox.stats.runs import runstest_1samp
+from statsmodels.stats.diagnostic import acorr_ljungbox
 
 __all__ = ["SplineProfile", "get_profile_mask_from_pairs", "get_offpulse_from_onpulse"]
 
@@ -91,8 +93,7 @@ class SplineProfile(object):
         """An estimate of the standard deviation of the offpulse noise."""
         if hasattr(self, "_noise_est") and self._noise_est is not None:
             return self._noise_est
-        mask = get_profile_mask_from_pairs(self._nbin, self.offpulse_pairs)
-        return np.std(self._prof[mask])
+        return np.std(self.residuals)
 
     @property
     def baseline_est(self) -> np.float_:
@@ -352,6 +353,76 @@ class SplineProfile(object):
 
         return underest_onpulse_pairs, overest_onpulse_pairs, true_maxima, minima
 
+    def gridsearch_onpulse_regions(
+        self, ntrials: int = 1000, logspan: float = 5.0, sigma_cutoff: float = 2.0
+    ) -> None:
+        """Perform a gridsearch over the smoothness parameter to find the spline
+        fit which results in the whitest residuals.
+
+        Parameters
+        ----------
+        ntrials : int, default: 1000
+            The number of trials to evaluate over the search range.
+        logspan : float, default: 5.0
+            Search in the range [sigma/logspan, sigma*logspan], where sigma is
+            an estimate of the noise in the profile.
+        sigma_cutoff : float, default: 2.0
+            The number of standard deviations above which a peak will be
+            considered real.
+        """
+        # Get an initial noise estimate using the sliding window method
+        noise_est = self.get_simple_noise_stats()[1]
+
+        # Define log-spaced trials in the specified search range
+        noise_est_trials = np.logspace(
+            np.log10(noise_est / 5), np.log10(noise_est * 5), ntrials
+        )
+
+        p_values = np.empty(ntrials, dtype=float)
+        for ii, noise_est_trial in enumerate(noise_est_trials):
+            # Fit the spline
+            self.fit_spline(noise_est_trial)
+
+            # Runs test for whether the sequence of signs is random
+            # Null hypothesis: the data is random
+            runs_test = runstest_1samp(self.residuals)[1]
+
+            # Ljung-Box test of autocorrelation in residuals
+            # Null hypothesis: the data is uncorrelated
+            lb_test = float(
+                acorr_ljungbox(self.residuals, lags=[10], return_df=True)["lb_pvalue"]
+            )
+
+            # Shapiro-Wilk test for normality
+            # Null hypothesis: the data is normally distributed
+            sw_test = shapiro(self.residuals)[1]
+
+            # Combine the p-values using the Fisher method
+            # Assumes the tests are independent (they should be)
+            p_values[ii] = combine_pvalues(
+                [runs_test, lb_test, sw_test], method="fisher"
+            )[1]
+
+        # The "best" noise estimate is the one with the highest p-value
+        noise_est_best = noise_est_trials[np.argmax(p_values)]
+
+        underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
+            noise_est_best, sigma_cutoff=sigma_cutoff
+        )
+        if overest_onpp is None or underest_onpp is None:
+            offpp = None
+        else:
+            offpp = get_offpulse_from_onpulse(overest_onpp)
+
+        self._noise_est_trials = noise_est_trials
+        self._p_values = p_values
+        self._offpulse_pairs = offpp
+        self._overest_onpulse_pairs = overest_onpp
+        self._underest_onpulse_pairs = underest_onpp
+        self._maxima = maxima
+        self._minima = minima
+        self._noise_est = noise_est_best
+
     def bootstrap_onpulse_regions(
         self, ntrials: int = 10, tol: float = 0.05, sigma_cutoff: float = 2.0
     ) -> None:
@@ -404,7 +475,7 @@ class SplineProfile(object):
             # Perform a normal test on the offpulse samples and the spline
             # residuals, and estimate the noise from whichever one is more
             # normally distributed
-            if normaltest(self.residuals)[1] > normaltest(self._prof[mask])[1]:
+            if shapiro(self.residuals)[1] > shapiro(self._prof[mask])[1]:
                 logger.debug("Using residuals to estimate noise")
                 new_noise_est = np.std(self.residuals)
             else:
@@ -554,6 +625,7 @@ class SplineProfile(object):
         plot_underestimate: bool = True,
         plot_overestimate: bool = True,
         plot_width: bool = False,
+        sourcename: str | None = None,
         savename: str = "profile_diagnostics",
     ) -> None:
         """Create a plot showing various diagnostics to verify that the
@@ -565,6 +637,8 @@ class SplineProfile(object):
             Show the onpulse underestimate(s). Default: `True`.
         plot_overestimate : `bool`, optional
             Show the onpulse overestimate(s). Default: `True`.
+        sourcename : `str`, optional
+            The name of the source to add to the plot.
         savename : `str`, optional
             The name of the output plot, excluding extension.
             Default: "profile_diagnostics".
@@ -572,21 +646,24 @@ class SplineProfile(object):
         # Create figure and axes
         fig = plt.figure(layout="constrained", figsize=(10, 7))
 
-        gs = gridspec.GridSpec(3, 2, width_ratios=[2, 1], figure=fig)
+        gs = gridspec.GridSpec(
+            4, 2, width_ratios=[2, 1], height_ratios=[1, 3, 3, 3], figure=fig
+        )
 
-        axLT = fig.add_subplot(gs[0, 0])
-        axLM = fig.add_subplot(gs[1, 0])
-        axLB = fig.add_subplot(gs[2, 0])
-        axRT = fig.add_subplot(gs[0, 1])
-        axRM = fig.add_subplot(gs[1, 1])
-        axRB = fig.add_subplot(gs[2, 1])
+        ax_text = fig.add_subplot(gs[0, :])
+        axLT = fig.add_subplot(gs[1, 0])
+        axLM = fig.add_subplot(gs[2, 0])
+        axLB = fig.add_subplot(gs[3, 0])
+        axRT = fig.add_subplot(gs[1, 1])
+        axRM = fig.add_subplot(gs[2, 1])
+        axRB = fig.add_subplot(gs[3, 1])
 
         left_axes = [axLT, axLM, axLB]
-        right_axes = [axRT, axRM]
+        right_axes = [axRT, axRM, axRB]
         all_axes = left_axes + right_axes
 
         xrange = (self._bins[0], self._bins[-1])
-        lw = 1.2
+        lw = 1.1
 
         # Profile
         axLT.plot(self._bins, self._prof, color="k", linewidth=lw, alpha=0.2)
@@ -690,7 +767,7 @@ class SplineProfile(object):
 
         # Residuals
         res = self.residuals
-        p = normaltest(res)[1]
+        p = shapiro(res)[1]
         mu = np.mean(res)
         std = np.std(res)
         hb = histogram(res, **hist_kwargs)
@@ -699,7 +776,7 @@ class SplineProfile(object):
         axRM.text(
             0.05,
             0.93,
-            f"$p=${p:.3f}\n$\\mu=${mu:.2E}\n$\\sigma=${std:.2E}",
+            f"$p_\\mathrm{{SW}}=${p:.3f}\n$\\mu=${mu:.2E}\n$\\sigma=${std:.2E}",
             verticalalignment="top",
             horizontalalignment="left",
             transform=axRM.transAxes,
@@ -713,7 +790,7 @@ class SplineProfile(object):
             if not np.all(np.logical_not(mask)):
                 noff = len(self._prof[mask])
                 if noff > 3:
-                    p = normaltest(self._prof[mask])[1]
+                    p = shapiro(self._prof[mask])[1]
                     mu = np.mean(self._prof[mask])
                     std = np.std(self._prof[mask])
                     hb = histogram(self._prof[mask], **hist_kwargs)
@@ -722,7 +799,7 @@ class SplineProfile(object):
                     axRT.text(
                         0.05,
                         0.93,
-                        f"$p=${p:.3f}\n$\\mu=${mu:.2E}\n$\\sigma=${std:.2E}",
+                        f"$p_\\mathrm{{SW}}=${p:.3f}\n$\\mu=${mu:.2E}\n$\\sigma=${std:.2E}",
                         verticalalignment="top",
                         horizontalalignment="left",
                         transform=axRT.transAxes,
@@ -739,29 +816,49 @@ class SplineProfile(object):
                     axRT.set_xlim(xlims_hist)
                     axRM.set_xlim(xlims_hist)
 
+        # p-values
+        if hasattr(self, "_p_values") and self._p_values is not None:
+            axRB.set_title("Residual Whiteness $p$-value", fontsize=12)
+            axRB.plot(self._noise_est_trials, self._p_values, linewidth=lw)
+            axRB.set_xlim([self._noise_est_trials[0], self._noise_est_trials[-1]])
+            axRB.set_xscale("log")
+            axRB.set_xlabel("Std. of Noise ($\sigma$)")
+        else:
+            axRB.set_visible(False)
+
         # Info
         if self._noise_est is not None:
             snr = f"{np.max(self._prof) / self._noise_est:.1f}"
         else:
             snr = "unknown"
 
-        axRB.set_xticks([])
-        axRB.set_yticks([])
-        axRB.spines[["left", "right", "top", "bottom"]].set_visible(False)
-        lines = [
+        ax_text.set_xticks([])
+        ax_text.set_yticks([])
+        ax_text.spines[["left", "right", "top", "bottom"]].set_visible(False)
+        fit_info_lines = [
+            sourcename,
             f"S/N={snr}",
             f"Nbin={self._nbin}",
             f"Nbin(on)={self._nbin - noff} "
             + f"({(self._nbin - noff) / self._nbin * 100:.1f}%)",
             f"Nbin(off)={noff} ({noff / self._nbin * 100:.1f}%)",
-        ] + w_info_lines
-        axRB.text(
+        ]
+        ax_text.text(
             0.0,
-            1.0,
-            "\n".join(lines),
+            0.9,
+            "    ".join(fit_info_lines),
             verticalalignment="top",
             horizontalalignment="left",
-            transform=axRB.transAxes,
+            transform=ax_text.transAxes,
+            fontsize=12,
+        )
+        ax_text.text(
+            0.0,
+            0.4,
+            "    ".join(w_info_lines),
+            verticalalignment="top",
+            horizontalalignment="left",
+            transform=ax_text.transAxes,
             fontsize=12,
         )
 

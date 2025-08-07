@@ -138,7 +138,7 @@ def main(
     # measured values later (e.g. noise_est)
     peak_flux = np.max(cube.profile)
     profile = psrutils.SplineProfile(cube.profile / peak_flux)
-    profile.bootstrap_onpulse_regions()
+    profile.gridsearch_onpulse_regions()
 
     if meas_widths:
         peak_fracs = [0.5, 0.1]
@@ -152,10 +152,11 @@ def main(
                     ]
 
     profile.plot_diagnostics(
-        savename=f"{cube.source}_profile_diagnostics",
         plot_overestimate=True,
         plot_underestimate=False,
         plot_width=meas_widths,
+        sourcename=cube.source,
+        savename=f"{cube.source}_profile_diagnostics",
     )
 
     logger.info("Running RM-Synthesis...")
