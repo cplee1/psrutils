@@ -10,12 +10,13 @@ from typing import Iterable
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
+import statsmodels.api as sm
 from astropy.stats import histogram
 from numpy.typing import ArrayLike, NDArray
 from scipy.interpolate import BSpline, PPoly, splrep
-from scipy.stats import combine_pvalues, shapiro
+from scipy.stats import combine_pvalues, shapiro, ttest_1samp
 from statsmodels.sandbox.stats.runs import runstest_1samp
-from statsmodels.stats.diagnostic import acorr_ljungbox
+from statsmodels.stats.diagnostic import acorr_ljungbox, het_breuschpagan
 
 __all__ = ["SplineProfile", "get_profile_mask_from_pairs", "get_offpulse_from_onpulse"]
 
@@ -345,10 +346,10 @@ class SplineProfile(object):
 
         # Fill the onpulse regions if there is signal between them
         underest_onpulse_pairs = _fill_onpulse_regions(
-            underest_onpulse_pairs, self._bspl, noise_est, sigma_cutoff, self._lims
+            underest_onpulse_pairs, self._bspl, noise_est, 1.0, self._lims
         )
         overest_onpulse_pairs = _fill_onpulse_regions(
-            overest_onpulse_pairs, self._bspl, noise_est, sigma_cutoff, self._lims
+            overest_onpulse_pairs, self._bspl, noise_est, 1.0, self._lims
         )
 
         return underest_onpulse_pairs, overest_onpulse_pairs, true_maxima, minima
@@ -375,36 +376,42 @@ class SplineProfile(object):
 
         # Define log-spaced trials in the specified search range
         noise_est_trials = np.logspace(
-            np.log10(noise_est / 5), np.log10(noise_est * 5), ntrials
+            np.log10(noise_est / logspan), np.log10(noise_est * logspan), ntrials
         )
 
-        p_values = np.empty(ntrials, dtype=float)
+        p_vals = np.empty(shape=(5, ntrials), dtype=float)
         for ii, noise_est_trial in enumerate(noise_est_trials):
             # Fit the spline
             self.fit_spline(noise_est_trial)
 
-            # Runs test for whether the sequence of signs is random
-            # Null hypothesis: the data is random
-            runs_test = runstest_1samp(self.residuals)[1]
-
-            # Ljung-Box test of autocorrelation in residuals
-            # Null hypothesis: the data is uncorrelated
-            lb_test = float(
-                acorr_ljungbox(self.residuals, lags=[10], return_df=True)["lb_pvalue"]
+            # Ljung-Box test for autocorrelation in the residuals
+            p_vals[1, ii] = float(
+                acorr_ljungbox(self.residuals, lags=[20], return_df=True)["lb_pvalue"]
             )
 
-            # Shapiro-Wilk test for normality
-            # Null hypothesis: the data is normally distributed
-            sw_test = shapiro(self.residuals)[1]
+            # Two-sided t-test for a non-zero mean
+            p_vals[2, ii] = ttest_1samp(self.residuals, 0.0)[1]
 
-            # Combine the p-values using the Fisher method
-            # Assumes the tests are independent (they should be)
-            p_values[ii] = combine_pvalues(
-                [runs_test, lb_test, sw_test], method="fisher"
+            # Runs test for a non-random sequence of signs about the mean
+            p_vals[3, ii] = runstest_1samp(self.residuals)[1]
+
+            # Breusch-Pagan Lagrange Multiplier test for heteroscedasticity
+            p_vals[4, ii] = het_breuschpagan(
+                self.residuals, sm.add_constant(self.bins)
             )[1]
 
+            # Combine the p-values of the individual tests
+            # Tippett's method simply returns the smallest p-value
+            p_vals[0, ii] = combine_pvalues(p_vals[1:5, ii], method="tippett")[1]
+
         # The "best" noise estimate is the one with the highest p-value
-        noise_est_best = noise_est_trials[np.argmax(p_values)]
+        idx_best = np.argmax(p_vals[0])
+        noise_est_best = noise_est_trials[idx_best]
+        logger.info(f"Ljung-Box test     : p = {p_vals[1, idx_best]:.3f}")
+        logger.info(f"Two-sided t-test   : p = {p_vals[2, idx_best]:.3f}")
+        logger.info(f"Runs test          : p = {p_vals[3, idx_best]:.3f}")
+        logger.info(f"Breusch-Pagan test : p = {p_vals[4, idx_best]:.3f}")
+        logger.info(f"Combined           : p = {p_vals[0, idx_best]:.3f}")
 
         underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
             noise_est_best, sigma_cutoff=sigma_cutoff
@@ -415,7 +422,7 @@ class SplineProfile(object):
             offpp = get_offpulse_from_onpulse(overest_onpp)
 
         self._noise_est_trials = noise_est_trials
-        self._p_values = p_values
+        self._p_values = p_vals[0]
         self._offpulse_pairs = offpp
         self._overest_onpulse_pairs = overest_onpp
         self._underest_onpulse_pairs = underest_onpp
@@ -595,13 +602,9 @@ class SplineProfile(object):
             # Sanity check
             assert len(root_pairs) == len(roots) / 2, "root pairing unsuccessful"
 
-            # Merge the pairs if they are contained within the same
-            # overestimated onpulse region
-            root_pairs = _get_contiguous_regions(root_pairs, self._minima)
-
             # Fill the pairs if there is signal between them
             root_pairs = _fill_onpulse_regions(
-                root_pairs, self._bspl, self._noise_est, sigma_cutoff, self._lims
+                root_pairs, self._bspl, self._noise_est, 1.0, self._lims
             )
 
             widths = []
