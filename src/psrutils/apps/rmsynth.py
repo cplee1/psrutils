@@ -150,6 +150,9 @@ def main(
                     results[w_param] = [
                         width for _, width in profile._widths[w_param][2]
                     ]
+                    results[w_param + "_roots"] = [
+                        root_pair for root_pair, _ in profile._widths[w_param][2]
+                    ]
 
     profile.plot_diagnostics(
         plot_overestimate=True,
