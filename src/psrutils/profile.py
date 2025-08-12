@@ -10,13 +10,12 @@ from typing import Iterable
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
-import statsmodels.api as sm
 from astropy.stats import histogram
 from numpy.typing import ArrayLike, NDArray
 from scipy.interpolate import BSpline, PPoly, splrep
-from scipy.stats import combine_pvalues, shapiro, ttest_1samp
+from scipy.stats import shapiro
 from statsmodels.sandbox.stats.runs import runstest_1samp
-from statsmodels.stats.diagnostic import acorr_ljungbox, het_breuschpagan
+from statsmodels.stats.diagnostic import acorr_ljungbox
 
 __all__ = ["SplineProfile", "get_profile_mask_from_pairs", "get_offpulse_from_onpulse"]
 
@@ -379,39 +378,21 @@ class SplineProfile(object):
             np.log10(noise_est / logspan), np.log10(noise_est * logspan), ntrials
         )
 
-        p_vals = np.empty(shape=(5, ntrials), dtype=float)
-        for ii, noise_est_trial in enumerate(noise_est_trials):
-            # Fit the spline
-            self.fit_spline(noise_est_trial)
+        p_values = np.empty(ntrials)
+        for ii in range(ntrials):
+            self.fit_spline(noise_est_trials[ii])
+            # Runs test for non-random runs of signs
+            p_runs = float(runstest_1samp(self.residuals)[1])
+            # Ljung-Box test for autocorrelations
+            p_lb = float(acorr_ljungbox(self.residuals, lags=[20])["lb_pvalue"])
+            # Calculate a "whiteness score" which is the log of the combined
+            # p-values, but note that since the tests are not independent, this
+            # does not represent a true p-value
+            p_values[ii] = np.log10(p_runs) + np.log10(p_lb)
 
-            # Ljung-Box test for autocorrelation in the residuals
-            p_vals[1, ii] = float(
-                acorr_ljungbox(self.residuals, lags=[20], return_df=True)["lb_pvalue"]
-            )
-
-            # Two-sided t-test for a non-zero mean
-            p_vals[2, ii] = ttest_1samp(self.residuals, 0.0)[1]
-
-            # Runs test for a non-random sequence of signs about the mean
-            p_vals[3, ii] = runstest_1samp(self.residuals)[1]
-
-            # Breusch-Pagan Lagrange Multiplier test for heteroscedasticity
-            p_vals[4, ii] = het_breuschpagan(
-                self.residuals, sm.add_constant(self.bins)
-            )[1]
-
-            # Combine the p-values of the individual tests
-            # Tippett's method simply returns the smallest p-value
-            p_vals[0, ii] = combine_pvalues(p_vals[1:5, ii], method="tippett")[1]
-
-        # The "best" noise estimate is the one with the highest p-value
-        idx_best = np.argmax(p_vals[0])
+        # Maximise the whiteness score
+        idx_best = np.argmax(p_values)
         noise_est_best = noise_est_trials[idx_best]
-        logger.info(f"Ljung-Box test     : p = {p_vals[1, idx_best]:.3f}")
-        logger.info(f"Two-sided t-test   : p = {p_vals[2, idx_best]:.3f}")
-        logger.info(f"Runs test          : p = {p_vals[3, idx_best]:.3f}")
-        logger.info(f"Breusch-Pagan test : p = {p_vals[4, idx_best]:.3f}")
-        logger.info(f"Combined           : p = {p_vals[0, idx_best]:.3f}")
 
         underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
             noise_est_best, sigma_cutoff=sigma_cutoff
@@ -422,7 +403,7 @@ class SplineProfile(object):
             offpp = get_offpulse_from_onpulse(overest_onpp)
 
         self._noise_est_trials = noise_est_trials
-        self._p_values = p_vals[0]
+        self._p_values = p_values
         self._offpulse_pairs = offpp
         self._overest_onpulse_pairs = overest_onpp
         self._underest_onpulse_pairs = underest_onpp
@@ -666,7 +647,7 @@ class SplineProfile(object):
         all_axes = left_axes + right_axes
 
         xrange = (self._bins[0], self._bins[-1])
-        lw = 1.1
+        lw = 0.9
 
         # Profile
         axLT.plot(self._bins, self._prof, color="k", linewidth=lw, alpha=0.2)
@@ -693,7 +674,7 @@ class SplineProfile(object):
 
         # Derivatives
         axLB.plot(
-            self._bins, self._d1_bspl(self._bins), color="k", linewidth=1.2, label="1st"
+            self._bins, self._d1_bspl(self._bins), color="k", linewidth=lw, label="1st"
         )
         axLB.plot(
             self._bins,
@@ -821,9 +802,10 @@ class SplineProfile(object):
 
         # p-values
         if hasattr(self, "_p_values") and self._p_values is not None:
-            axRB.set_title("Residual Whiteness $p$-value", fontsize=12)
-            axRB.plot(self._noise_est_trials, self._p_values, linewidth=lw)
+            axRB.set_title("Whiteness Score", fontsize=12)
+            axRB.plot(self._noise_est_trials, self._p_values, linewidth=lw, color="k")
             axRB.set_xlim([self._noise_est_trials[0], self._noise_est_trials[-1]])
+            axRB.set_ylim([-100, 0])
             axRB.set_xscale("log")
             axRB.set_xlabel("Std. of Noise ($\sigma$)")
         else:
