@@ -411,109 +411,109 @@ class SplineProfile(object):
         self._minima = minima
         self._noise_est = noise_est_best
 
-    def bootstrap_onpulse_regions(
-        self, ntrials: int = 10, tol: float = 0.05, sigma_cutoff: float = 2.0
-    ) -> None:
-        """Bootstrap the onpulse-finding method by fitting a spline with
-        the new estimated offpulse noise on each iteration. The
-        bootstrapping is repeated until either the maximum number of trials
-        has been reaches or the fractional difference between subsequent
-        noise estimates falls below a specified tolerance.
+    # def bootstrap_onpulse_regions(
+    #     self, ntrials: int = 10, tol: float = 0.05, sigma_cutoff: float = 2.0
+    # ) -> None:
+    #     """Bootstrap the onpulse-finding method by fitting a spline with
+    #     the new estimated offpulse noise on each iteration. The
+    #     bootstrapping is repeated until either the maximum number of trials
+    #     has been reaches or the fractional difference between subsequent
+    #     noise estimates falls below a specified tolerance.
 
-        See the `get_onpulse_regions()` method for further details.
+    #     See the `get_onpulse_regions()` method for further details.
 
-        Parameters
-        ----------
-        ntrials : `int`, optional
-            The maximum number of times to iterate the noise estimate.
-            Default 10.
-        tol : `float`, optional
-            The minimum fractional difference between subsequent noise
-            estimates before exiting the loop. Default 0.1.
-        sigma_cutoff : `float`, optional
-            The number of standard deviations above which a peak will be
-            considered real. Default 2.0.
-        """
-        logger.debug("Bootstrapping to estimate onpulse...")
+    #     Parameters
+    #     ----------
+    #     ntrials : `int`, optional
+    #         The maximum number of times to iterate the noise estimate.
+    #         Default 10.
+    #     tol : `float`, optional
+    #         The minimum fractional difference between subsequent noise
+    #         estimates before exiting the loop. Default 0.1.
+    #     sigma_cutoff : `float`, optional
+    #         The number of standard deviations above which a peak will be
+    #         considered real. Default 2.0.
+    #     """
+    #     logger.debug("Bootstrapping to estimate onpulse...")
 
-        old_noise_est = self.get_simple_noise_stats()[1]
-        logger.debug(f"Initial noise estimate: {old_noise_est}")
+    #     old_noise_est = self.get_simple_noise_stats()[1]
+    #     logger.debug(f"Initial noise estimate: {old_noise_est}")
 
-        underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
-            old_noise_est, sigma_cutoff=sigma_cutoff
-        )
-        if overest_onpp is None or underest_onpp is None:
-            raise RuntimeError("Bootstrapping failed on initial run")
+    #     underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
+    #         old_noise_est, sigma_cutoff=sigma_cutoff
+    #     )
+    #     if overest_onpp is None or underest_onpp is None:
+    #         raise RuntimeError("Bootstrapping failed on initial run")
 
-        old_offpp = get_offpulse_from_onpulse(overest_onpp)
-        old_overest_onpp = overest_onpp
-        old_underest_onpp = underest_onpp
-        old_maxima = maxima
-        old_minima = minima
-        old_tollvl = None
+    #     old_offpp = get_offpulse_from_onpulse(overest_onpp)
+    #     old_overest_onpp = overest_onpp
+    #     old_underest_onpp = underest_onpp
+    #     old_maxima = maxima
+    #     old_minima = minima
+    #     old_tollvl = None
 
-        for trial in range(ntrials):
-            # Calculate the offpulse noise
-            mask = get_profile_mask_from_pairs(self._nbin, old_offpp)
+    #     for trial in range(ntrials):
+    #         # Calculate the offpulse noise
+    #         mask = get_profile_mask_from_pairs(self._nbin, old_offpp)
 
-            if np.all(np.logical_not(mask)):
-                logger.warning("Offpulse and onpulse region cannot be separated")
-                break
+    #         if np.all(np.logical_not(mask)):
+    #             logger.warning("Offpulse and onpulse region cannot be separated")
+    #             break
 
-            # Perform a normal test on the offpulse samples and the spline
-            # residuals, and estimate the noise from whichever one is more
-            # normally distributed
-            if shapiro(self.residuals)[1] > shapiro(self._prof[mask])[1]:
-                logger.debug("Using residuals to estimate noise")
-                new_noise_est = np.std(self.residuals)
-            else:
-                logger.debug("Using offpulse to estimate noise")
-                new_noise_est = np.std(self._prof[mask])
+    #         # Perform a normal test on the offpulse samples and the spline
+    #         # residuals, and estimate the noise from whichever one is more
+    #         # normally distributed
+    #         if shapiro(self.residuals)[1] > shapiro(self._prof[mask])[1]:
+    #             logger.debug("Using residuals to estimate noise")
+    #             new_noise_est = np.std(self.residuals)
+    #         else:
+    #             logger.debug("Using offpulse to estimate noise")
+    #             new_noise_est = np.std(self._prof[mask])
 
-            if np.isclose(new_noise_est, 0.0):
-                logger.warning("New noise estimate is zero")
-                break
+    #         if np.isclose(new_noise_est, 0.0):
+    #             logger.warning("New noise estimate is zero")
+    #             break
 
-            # Check whether the tolerance level has been reached
-            new_tollvl = abs((old_noise_est - new_noise_est) / new_noise_est)
-            logger.debug(f"Trial {trial + 1}: {new_noise_est=} {new_tollvl=}")
+    #         # Check whether the tolerance level has been reached
+    #         new_tollvl = abs((old_noise_est - new_noise_est) / new_noise_est)
+    #         logger.debug(f"Trial {trial + 1}: {new_noise_est=} {new_tollvl=}")
 
-            if old_tollvl is not None and new_tollvl > old_tollvl:
-                logger.debug(f"Hit tolerance minimum on trial {trial}")
-                break
+    #         if old_tollvl is not None and new_tollvl > old_tollvl:
+    #             logger.debug(f"Hit tolerance minimum on trial {trial}")
+    #             break
 
-            if new_tollvl <= tol:
-                logger.debug(f"Reached tolerance on trial {trial + 1}")
-                break
+    #         if new_tollvl <= tol:
+    #             logger.debug(f"Reached tolerance on trial {trial + 1}")
+    #             break
 
-            if trial + 1 == ntrials:
-                logger.debug(f"Reached max number of trials ({ntrials})")
-                break
+    #         if trial + 1 == ntrials:
+    #             logger.debug(f"Reached max number of trials ({ntrials})")
+    #             break
 
-            # Perform the analysis
-            underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
-                new_noise_est, sigma_cutoff=sigma_cutoff
-            )
-            if overest_onpp is None or underest_onpp is None:
-                logger.warning(f"Bootstrapping failed on trial {trial}")
-                # Roll back the spline attributes to the previous fit
-                self.fit_spline(old_noise_est)
-                break
+    #         # Perform the analysis
+    #         underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
+    #             new_noise_est, sigma_cutoff=sigma_cutoff
+    #         )
+    #         if overest_onpp is None or underest_onpp is None:
+    #             logger.warning(f"Bootstrapping failed on trial {trial}")
+    #             # Roll back the spline attributes to the previous fit
+    #             self.fit_spline(old_noise_est)
+    #             break
 
-            old_offpp = get_offpulse_from_onpulse(overest_onpp)
-            old_overest_onpp = overest_onpp
-            old_underest_onpp = underest_onpp
-            old_maxima = maxima
-            old_minima = minima
-            old_noise_est = new_noise_est
-            old_tollvl = new_tollvl
+    #         old_offpp = get_offpulse_from_onpulse(overest_onpp)
+    #         old_overest_onpp = overest_onpp
+    #         old_underest_onpp = underest_onpp
+    #         old_maxima = maxima
+    #         old_minima = minima
+    #         old_noise_est = new_noise_est
+    #         old_tollvl = new_tollvl
 
-        self._offpulse_pairs = old_offpp
-        self._overest_onpulse_pairs = old_overest_onpp
-        self._underest_onpulse_pairs = old_underest_onpp
-        self._maxima = old_maxima
-        self._minima = old_minima
-        self._noise_est = old_noise_est
+    #     self._offpulse_pairs = old_offpp
+    #     self._overest_onpulse_pairs = old_overest_onpp
+    #     self._underest_onpulse_pairs = old_underest_onpp
+    #     self._maxima = old_maxima
+    #     self._minima = old_minima
+    #     self._noise_est = old_noise_est
 
     def measure_pulse_widths(
         self, peak_fracs: list | None = None, sigma_cutoff: int = 2.0
@@ -944,43 +944,43 @@ def _get_flanking_roots(
 
 
 # TODO: Format docstring
-def _get_contiguous_regions(
-    pairs: Iterable[tuple[np.float_, np.float_]], minima: Iterable[np.float_]
-) -> list[tuple[np.float_, np.float_]]:
-    """Merge together regions which are connected by a common minimum.
+# def _get_contiguous_regions(
+#     pairs: Iterable[tuple[np.float_, np.float_]], minima: Iterable[np.float_]
+# ) -> list[tuple[np.float_, np.float_]]:
+#     """Merge together regions which are connected by a common minimum.
 
-    Parameters
-    ----------
-    pairs : `Iterable[tuple[np.float_, np.float_]]`
-        A list of pairs defining the inverval of each region.
-    minima : `Iterable[np.float_]`
-        A list of minima to use to connect adjacent regions.
+#     Parameters
+#     ----------
+#     pairs : `Iterable[tuple[np.float_, np.float_]]`
+#         A list of pairs defining the inverval of each region.
+#     minima : `Iterable[np.float_]`
+#         A list of minima to use to connect adjacent regions.
 
-    Returns
-    -------
-    new_pairs : `list[tuple[np.float_, np.float_]]`
-        A list of pairs defining the interval of each new region.
-    """
-    flk_pairs = []
-    for pair in pairs:
-        flk_roots = _get_flanking_roots(pair, minima)
-        flk_pairs.append((flk_roots[0][0], flk_roots[-1][1]))
+#     Returns
+#     -------
+#     new_pairs : `list[tuple[np.float_, np.float_]]`
+#         A list of pairs defining the interval of each new region.
+#     """
+#     flk_pairs = []
+#     for pair in pairs:
+#         flk_roots = _get_flanking_roots(pair, minima)
+#         flk_pairs.append((flk_roots[0][0], flk_roots[-1][1]))
 
-    new_pairs = []
-    new_flk_pairs = []
-    for pair, flk_pair in zip(pairs, flk_pairs, strict=True):
-        if new_pairs and flk_pair[0] == new_flk_pairs[-1][1]:
-            # If the flanking minima are touching
-            new_pairs[-1][1] = pair[1]
-            new_flk_pairs[-1][1] = flk_pair[1]
-        elif new_pairs and flk_pair[1] == new_flk_pairs[0][0]:
-            # If the last element wraps around to the first
-            new_pairs[0][0] = pair[0]
-            new_flk_pairs[0][0] = flk_pair[0]
-        else:
-            new_pairs.append(list(pair))
-            new_flk_pairs.append(list(flk_pair))
-    return [tuple(pair) for pair in new_pairs]
+#     new_pairs = []
+#     new_flk_pairs = []
+#     for pair, flk_pair in zip(pairs, flk_pairs, strict=True):
+#         if new_pairs and flk_pair[0] == new_flk_pairs[-1][1]:
+#             # If the flanking minima are touching
+#             new_pairs[-1][1] = pair[1]
+#             new_flk_pairs[-1][1] = flk_pair[1]
+#         elif new_pairs and flk_pair[1] == new_flk_pairs[0][0]:
+#             # If the last element wraps around to the first
+#             new_pairs[0][0] = pair[0]
+#             new_flk_pairs[0][0] = flk_pair[0]
+#         else:
+#             new_pairs.append(list(pair))
+#             new_flk_pairs.append(list(flk_pair))
+#     return [tuple(pair) for pair in new_pairs]
 
 
 # TODO: Format docstring
