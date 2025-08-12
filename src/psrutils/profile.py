@@ -820,6 +820,8 @@ class SplineProfile(object):
         ax_text.set_xticks([])
         ax_text.set_yticks([])
         ax_text.spines[["left", "right", "top", "bottom"]].set_visible(False)
+        if sourcename is None:
+            sourcename = "Unknown Source"
         fit_info_lines = [
             sourcename,
             f"S/N={snr}",
