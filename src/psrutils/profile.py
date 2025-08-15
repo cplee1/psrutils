@@ -515,9 +515,7 @@ class SplineProfile(object):
     #     self._minima = old_minima
     #     self._noise_est = old_noise_est
 
-    def measure_pulse_widths(
-        self, peak_fracs: list | None = None, sigma_cutoff: int = 2.0
-    ) -> None:
+    def measure_pulse_widths(self, peak_fracs: list | None = None) -> None:
         """Measure the pulse width(s) at a given fraction of the peak flux
         density.
 
@@ -526,15 +524,16 @@ class SplineProfile(object):
         peak_fracs : `list`, optional
             The peak fraction to find the width(s) at (i.e. 0.1 for W10).
             Default: [0.5, 0.1].
-        sigma_cutoff : `int`, optional
-            The number of standard deviations above which a peak will be
-            considered real. Default 2.0.
         """
-        assert self._ppoly
-        assert self._d1_ppoly
-        assert self._maxima
-        assert self._minima
-        assert self._noise_est
+        try:
+            assert self._ppoly, "spline has not been fit"
+            assert self._d1_ppoly, "spline has not been fit"
+            assert self._maxima, "no true profile maxima found"
+            assert self._minima, "no profile minima found"
+            assert self._noise_est, "noise estimate not defined"
+        except AssertionError as e:
+            logger.error(f"Cannot measure pulse widths: {e}")
+            return
 
         if peak_fracs is None:
             peak_fracs = [0.5, 0.1]
@@ -611,6 +610,7 @@ class SplineProfile(object):
         plot_width: bool = False,
         sourcename: str | None = None,
         savename: str = "profile_diagnostics",
+        save_pdf: bool = False,
     ) -> None:
         """Create a plot showing various diagnostics to verify that the
         spline fit is reasonable.
@@ -626,6 +626,8 @@ class SplineProfile(object):
         savename : `str`, optional
             The name of the output plot, excluding extension.
             Default: "profile_diagnostics".
+        save_pdf : bool, default: Fale
+            Save the plot as a pdf?
         """
         # Create figure and axes
         fig = plt.figure(layout="constrained", figsize=(10, 7))
@@ -873,6 +875,92 @@ class SplineProfile(object):
 
         logger.info(f"Saving plot file: {savename}.png")
         fig.savefig(savename + ".png")
+
+        if save_pdf:
+            logger.info(f"Saving plot file: {savename}.pdf")
+            fig.savefig(savename + ".pdf")
+
+        plt.close()
+
+    def plot_pubfig(
+        self, title: str | None = None, savename: str = "pubfig", save_pdf: bool = False
+    ) -> None:
+        """Create a publication-quality plot showing the profile and spline.
+
+        Parameters
+        ----------
+        title : `str`, optional
+            The plot title.
+        savename : `str`, optional
+            The name of the output plot, excluding extension.
+            Default: "pubfig".
+        save_pdf : bool, default: Fale
+            Save the plot as a pdf?
+        """
+        # Create figure and axes
+        fig = plt.figure(layout="tight", figsize=(5.5, 5))
+
+        gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1], hspace=0.0, figure=fig)
+
+        axT = fig.add_subplot(gs[0])
+        axB = fig.add_subplot(gs[1])
+
+        lw = 0.9
+
+        xrange = [self.phases[0], self.phases[-1]]
+        bins_interp = np.linspace(self._bins[0], self._bins[-1], 1000)
+        phases_interp = bins_interp / (self._nbin - 1)
+
+        # Profile
+        axT.plot(self.phases, self._prof, color="silver", linewidth=lw, label="Data")
+        axT.plot(
+            phases_interp,
+            self._bspl(bins_interp),
+            color="k",
+            linewidth=lw,
+            label="Spline",
+        )
+        axT.axvline()
+        axT.set_xticklabels([])
+        axT.legend(loc="upper left")
+
+        # Residuals
+        axB.plot(
+            self.phases,
+            self._prof - self._bspl(self._bins),
+            color="silver",
+            linestyle="none",
+            marker="o",
+            markersize=0.8,
+        )
+        axB.axhline(0, linestyle="--", color="k", linewidth=lw)
+        axB.axhline(0, linestyle="--", color="k", linewidth=lw)
+        axB.set_ylim([-4 * self.noise_est, 4 * self.noise_est])
+
+        # Ticks
+        for ax in [axT, axB]:
+            ax.set_xlim(xrange)
+            ax.minorticks_on()
+            ax.tick_params(which="both", right=True, top=True)
+            ax.tick_params(axis="both", which="both", direction="in")
+            ax.tick_params(axis="both", which="major", length=4)
+            ax.tick_params(axis="both", which="minor", length=2)
+
+        # Labels
+        axB.set_xlabel("Pulse Phase")
+        axB.set_ylabel("Residuals")
+        axT.set_ylabel("Normalised Intensity")
+        fig.align_ylabels()
+        if title is not None:
+            axT.set_title(title)
+
+        logger.info(f"Saving plot file: {savename}.png")
+        fig.savefig(savename + ".png")
+
+        if save_pdf:
+            logger.info(f"Saving plot file: {savename}.pdf")
+            fig.savefig(savename + ".pdf")
+
         plt.close()
 
 

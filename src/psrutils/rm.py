@@ -11,7 +11,8 @@ from numpy.typing import NDArray
 from scipy.optimize import curve_fit
 from tqdm import trange
 
-import psrutils
+from .cube import StokesCube
+from .kernels import dft_kernel
 
 __all__ = ["rm_synthesis", "rm_clean"]
 
@@ -150,7 +151,7 @@ def _measure_rm_unc_analytic(
 
 # TODO: Format docstring
 def rm_synthesis(
-    cube: psrutils.StokesCube,
+    cube: StokesCube,
     phi: NDArray,
     norm: str | None = None,
     meas_rm_prof: bool = False,
@@ -163,7 +164,7 @@ def rm_synthesis(
 
     Parameters
     ----------
-    cube : `psrutils.StokesCube`
+    cube : `StokesCube`
         A StokesCube object.
     phi : `NDArray`
         An array of Faraday depths (in rad/m^2) to compute.
@@ -267,8 +268,8 @@ def rm_synthesis(
 
         # Perform RM synthesis on the real observed data (for plotting)
         P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm)
-        rmsf[bin] = psrutils.dft_kernel(W, rmsf[bin], rmsf_phi, l2, l2_0, K)
-        fdf[bin] = psrutils.dft_kernel(P * W, fdf[bin], phi, l2, l2_0, K)
+        rmsf[bin] = dft_kernel(W, rmsf[bin], rmsf_phi, l2, l2_0, K)
+        fdf[bin] = dft_kernel(P * W, fdf[bin], phi, l2, l2_0, K)
 
         if type(bootstrap_nsamp) is int:
             # Bootstrap the RM_phi
@@ -276,7 +277,7 @@ def rm_synthesis(
                 Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                 U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
                 P = (Q_rvs + 1j * U_rvs) / model
-                tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
+                tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                 rm_phi_samples[bin, iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
         else:
             rm_phi_samples[bin], _ = _measure_rm(phi, np.abs(fdf[bin]))
@@ -296,7 +297,7 @@ def rm_synthesis(
                     P, model = _normalise_spectrum(
                         Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm
                     )
-                    tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
+                    tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                     tmp_prof_fdf += np.abs(tmp_fdf)
                 tmp_prof_fdf /= len(onpulse_bins)
                 rm_prof_samples[iter], _ = _measure_rm(phi, tmp_prof_fdf)
@@ -318,11 +319,11 @@ def rm_synthesis(
                 P, model = _normalise_spectrum(
                     Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm
                 )
-                tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
+                tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                 rm_scat_samples[iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
         else:
             P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm)
-            tmp_fdf = psrutils.dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
+            tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
             rm_scat_samples, _ = _measure_rm(phi, np.abs(tmp_fdf))
     else:
         rm_scat_samples = None

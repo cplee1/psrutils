@@ -79,6 +79,12 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--plot_pol_prof", is_flag=True, help="Plot the full polarisation profile."
 )
+@click.option(
+    "--plot_diagnostics", is_flag=True, help="Plot profile fitting diagnostics."
+)
+@click.option(
+    "--plot_publn_prof", is_flag=True, help="Plot the profile and spline fit."
+)
 @click.option("--save_pdf", is_flag=True, help="Save plots in PDF format.")
 @click.option(
     "--save_phase_resolved", is_flag=True, help="Save phase-resolved measurements."
@@ -110,6 +116,8 @@ def main(
     plot_onpulse: bool,
     plot_pa: bool,
     plot_pol_prof: bool,
+    plot_diagnostics: bool,
+    plot_publn_prof: bool,
     save_pdf: bool,
     save_phase_resolved: bool,
     dark_mode: bool,
@@ -154,13 +162,20 @@ def main(
                         root_pair for root_pair, _ in profile._widths[w_param][2]
                     ]
 
-    profile.plot_diagnostics(
-        plot_overestimate=True,
-        plot_underestimate=False,
-        plot_width=meas_widths,
-        sourcename=cube.source,
-        savename=f"{cube.source}_profile_diagnostics",
-    )
+    if plot_diagnostics:
+        profile.plot_diagnostics(
+            plot_overestimate=True,
+            plot_underestimate=False,
+            plot_width=meas_widths,
+            sourcename=cube.source,
+            savename=f"{cube.source}_profile_diagnostics",
+            save_pdf=save_pdf,
+        )
+
+    if plot_publn_prof:
+        profile.plot_pubfig(
+            title=cube.source, savename=f"{cube.source}_pubfig", save_pdf=save_pdf
+        )
 
     logger.info("Running RM-Synthesis...")
     results["RM_search_limit"] = rmlim

@@ -13,7 +13,8 @@ from astropy.time import Time
 from astropy.visualization import hist, quantity_support, time_support
 from psrqpy import QueryATNF
 
-import psrutils
+from .cube import StokesCube
+from .plotting import format_ticks
 
 try:
     from spinifex import get_rm
@@ -29,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: Format docstring
 def get_rm_iono(
-    cube: psrutils.StokesCube,
+    cube: StokesCube,
     bootstrap_nsamp: int | None = None,
     prefix: str = "jpl",
     server: str = "cddis",
@@ -105,7 +106,7 @@ def get_rm_iono(
                     orientation="horizontal",
                 )
                 ax_hist.set_xlabel("Probability Density")
-                psrutils.format_ticks(ax_hist)
+                format_ticks(ax_hist)
             else:
                 fig, ax_rm = plt.subplots(figsize=(7, 5), tight_layout=True)
 
@@ -115,7 +116,7 @@ def get_rm_iono(
                 "$\mathrm{RM}_\mathrm{iono}$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]"
             )
             ax_rm.set_xlabel("UTC Date")
-            psrutils.format_ticks(ax_rm)
+            format_ticks(ax_rm)
             ax_rm.set_xticklabels(ax_rm.get_xticklabels(), rotation=30)
             logger.info(f"Saving plot file: {savename}.png")
             fig.savefig(savename + ".png")
