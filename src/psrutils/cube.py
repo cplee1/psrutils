@@ -95,10 +95,16 @@ class StokesCube(object):
 
         # By default, ensure the archive is dedispersed
         if dedisperse and not self._archive.get_dedispersed():
-            self._archive.dedisperse()
+            try:
+                self._archive.dedisperse()
+            except RuntimeError as e:
+                logger.error(e)
 
         # Must remove the baseline before downsampling
-        self._archive.remove_baseline()
+        try:
+            self._archive.remove_baseline()
+        except RuntimeError as e:
+            logger.error(e)
 
         # Downsample
         if isinstance(tscrunch, int):
