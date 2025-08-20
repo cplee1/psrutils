@@ -181,14 +181,22 @@ def main(
     results["RM_search_limit"] = rmlim
     results["RM_search_resolution"] = rmres
     phi = np.arange(-1.0 * rmlim, rmlim + rmres, rmres)
+    if len(profile.overest_onpulse_bins) == 0:
+        onpulse_bins = None
+    else:
+        onpulse_bins = profile.overest_onpulse_bins
+    if len(profile.offpulse_bins) == 0:
+        offpulse_bins = None
+    else:
+        offpulse_bins = profile.offpulse_bins
     rmsyn_result = psrutils.rm_synthesis(
         cube,
         phi,
         meas_rm_prof=meas_rm_prof,
         meas_rm_scat=meas_rm_scat,
         bootstrap_nsamp=nsamp,
-        onpulse_bins=profile.overest_onpulse_bins,
-        offpulse_bins=profile.offpulse_bins,
+        onpulse_bins=onpulse_bins,
+        offpulse_bins=offpulse_bins,
     )
     fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = (
         rmsyn_result
