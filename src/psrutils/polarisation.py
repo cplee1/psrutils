@@ -46,7 +46,9 @@ class PolProfile(NamedTuple):
     """The standard deviation of the offpulse noise in the Stokes I profile."""
 
 
-def get_bias_corrected_pol_profile(iquv: NDArray[np.float64]) -> PolProfile:
+def get_bias_corrected_pol_profile(
+    iquv: NDArray[np.float64], spline: bool = False
+) -> PolProfile:
     """Get the full-polarisation pulse profile and correct for bias in the
     linear polarisation degree and angle.
 
@@ -54,6 +56,10 @@ def get_bias_corrected_pol_profile(iquv: NDArray[np.float64]) -> PolProfile:
     ----------
     iquv : NDArray[float64]
         The polarisation profile, with dimensions (pol, phase).
+    spline : bool, default: False
+        Use the spline fitting method to estimate the noise in the profile when
+        debiasing the linear polarisation. Otherwise, use the minimum integrated
+        flux density method.
 
     Returns
     -------
@@ -65,8 +71,11 @@ def get_bias_corrected_pol_profile(iquv: NDArray[np.float64]) -> PolProfile:
 
     # Estimate the offpulse noise
     profile = SplineProfile(iquv[0])
-    profile.gridsearch_onpulse_regions()
-    sigma_i = float(profile.noise_est)
+    if spline:
+        profile.gridsearch_onpulse_regions()
+        sigma_i = float(profile.noise_est)
+    else:
+        sigma_i = float(profile.get_simple_noise_stats()[1])
 
     # Measured Stokes L
     l_meas: NDArray[np.float64] = np.sqrt(iquv[1] ** 2 + iquv[2] ** 2)
