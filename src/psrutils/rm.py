@@ -91,7 +91,9 @@ def _normalise_spectrum(
 
 
 # TODO: Format docstring
-def _measure_rm(phi: NDArray, fdf_amp: NDArray) -> Tuple[float, float]:
+def _measure_rm(
+    phi: NDArray, fdf_amp: NDArray, zp_hwhm: float | None
+) -> Tuple[float, float]:
     """Measure the RM and its statistical uncertainty from a FDF.
 
     If both 'res' and 'rmsf_fwhm' are provided, will compute analytic uncertainty
@@ -103,6 +105,9 @@ def _measure_rm(phi: NDArray, fdf_amp: NDArray) -> Tuple[float, float]:
         An array of Faraday depths (in rad/m^2) at which the FDF is computed.
     fdf_amp : `NDArray`
         The amplitude of the Faraday dispersion function.
+    zp_hwhm : `float`, optional
+        If not None, will mask the samples near zero, using this value as the
+        half width at half maximum of the zero peak.
 
     Returns
     -------
@@ -111,17 +116,27 @@ def _measure_rm(phi: NDArray, fdf_amp: NDArray) -> Tuple[float, float]:
     fdf_peak_amp : `float
         The amplitude at the peak of the FDF.
     """
-    x0 = np.argmax(fdf_amp)
-    if x0 == 0 or x0 == len(phi) - 1:
-        # Peak is an edge bin
-        fdf_peak_rm = phi[x0]
-        fdf_peak_amp = np.max(fdf_amp)
+    edge_case = False
+    if isinstance(zp_hwhm, float):
+        masked_fdf_amp = np.where(np.abs(phi) < zp_hwhm, np.nan, fdf_amp)
+        x0 = np.nanargmax(masked_fdf_amp)
+        if x0 - 1 >= 0 and np.isnan(masked_fdf_amp[x0 - 1]):
+            edge_case = True
+        if x0 + 1 <= len(phi) - 1 and np.isnan(masked_fdf_amp[x0 + 1]):
+            edge_case = True
+    else:
+        x0 = np.argmax(fdf_amp)
+
+    if x0 == 0 or x0 == len(phi) - 1 or edge_case:
+        fdf_peak_rm = np.nan
+        fdf_peak_amp = np.nan
     else:
         y = fdf_amp[x0 - 1 : x0 + 2]
         x = phi[x0 - 1 : x0 + 2]
         poly = np.polyfit(x, y, 2)
         fdf_peak_rm = -1.0 * poly[1] / (2.0 * poly[0])
         fdf_peak_amp = np.polyval(poly, fdf_peak_rm)
+
     return fdf_peak_rm, fdf_peak_amp
 
 
@@ -159,6 +174,7 @@ def rm_synthesis(
     bootstrap_nsamp: int | None = None,
     onpulse_bins: NDArray | None = None,
     offpulse_bins: NDArray | None = None,
+    mask_zero_peak: bool = False,
 ) -> None:
     """Perform RM-synthesis for each phase bin.
 
@@ -184,6 +200,8 @@ def rm_synthesis(
         Default: `None`.
     offpulse_bins : `NDArray`, optional
         The bin indices of the offpulse window. Default: `None`.
+    mask_zero_peak : `bool`, optional
+        Ignore samples that fall within the zero-peak.
     """
     # Compute squared wavelengths and reference squared wavelength
     l2 = cube.lambda_sq
@@ -214,6 +232,12 @@ def rm_synthesis(
         span_l2=span_l2,
         rmsf_fwhm=rmsf_fwhm,
     )
+
+    # Only define this variable if you want to mask the zero-peak
+    if mask_zero_peak:
+        zp_hwhm = rmsf_fwhm / 2
+    else:
+        zp_hwhm = None
 
     # Compute the Faraday depths to evaluate the RMSF at
     nrmsf = 2 * len(phi) + 1
@@ -278,9 +302,11 @@ def rm_synthesis(
                 U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
                 P = (Q_rvs + 1j * U_rvs) / model
                 tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
-                rm_phi_samples[bin, iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
+                rm_phi_samples[bin, iter], _ = _measure_rm(
+                    phi, np.abs(tmp_fdf), zp_hwhm
+                )
         else:
-            rm_phi_samples[bin], _ = _measure_rm(phi, np.abs(fdf[bin]))
+            rm_phi_samples[bin], _ = _measure_rm(phi, np.abs(fdf[bin]), zp_hwhm)
 
     if meas_rm_prof:
         logger.info("Computing RM_prof...")
@@ -300,9 +326,9 @@ def rm_synthesis(
                     tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                     tmp_prof_fdf += np.abs(tmp_fdf)
                 tmp_prof_fdf /= len(onpulse_bins)
-                rm_prof_samples[iter], _ = _measure_rm(phi, tmp_prof_fdf)
+                rm_prof_samples[iter], _ = _measure_rm(phi, tmp_prof_fdf, zp_hwhm)
         else:
-            rm_prof_samples, _ = _measure_rm(phi, np.abs(fdf).mean(0))
+            rm_prof_samples, _ = _measure_rm(phi, np.abs(fdf).mean(0), zp_hwhm)
     else:
         rm_prof_samples = None
 
@@ -320,11 +346,11 @@ def rm_synthesis(
                     Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm
                 )
                 tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
-                rm_scat_samples[iter], _ = _measure_rm(phi, np.abs(tmp_fdf))
+                rm_scat_samples[iter], _ = _measure_rm(phi, np.abs(tmp_fdf), zp_hwhm)
         else:
             P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm)
             tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
-            rm_scat_samples, _ = _measure_rm(phi, np.abs(tmp_fdf))
+            rm_scat_samples, _ = _measure_rm(phi, np.abs(tmp_fdf), zp_hwhm)
     else:
         rm_scat_samples = None
 

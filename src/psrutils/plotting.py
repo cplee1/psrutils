@@ -920,11 +920,14 @@ def plot_rm_hist(
         Save the plot as a pdf? Default: `False`.
     """
     fig, ax = plt.subplots(figsize=(4.5, 4), tight_layout=True)
+
+    samples = samples[~np.isnan(samples)]
     hist(samples, bins="knuth", ax=ax, histtype="stepfilled", density=True)
     main_ax = ax
     main_samples = samples
 
     if valid_samples is not None:
+        valid_samples = valid_samples[~np.isnan(valid_samples)]
         ax_ins = ax.inset_axes([0.1, 0.6, 0.3, 0.3])
         main_ax = ax_ins
         main_samples = valid_samples

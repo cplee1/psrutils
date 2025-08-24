@@ -66,6 +66,11 @@ logger = logging.getLogger(__name__)
 )
 @click.option("--meas_rm_prof", is_flag=True, help="Measure RM_prof.")
 @click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
+@click.option(
+    "--mask_zero_peak",
+    is_flag=True,
+    help="Ignore measurements that fall within the zero-peak.",
+)
 @click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
 @click.option("--get_rm_iono", is_flag=True, help="Get the ionospheric RM.")
 @click.option("--no_clean", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
@@ -107,6 +112,7 @@ def main(
     clean_cutoff: float,
     meas_rm_prof: bool,
     meas_rm_scat: bool,
+    mask_zero_peak: bool,
     meas_widths: bool,
     get_rm_iono: bool,
     no_clean: bool,
@@ -197,6 +203,7 @@ def main(
         bootstrap_nsamp=nsamp,
         onpulse_bins=onpulse_bins,
         offpulse_bins=offpulse_bins,
+        mask_zero_peak=mask_zero_peak,
     )
     fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = (
         rmsyn_result
@@ -241,8 +248,8 @@ def main(
             else:
                 rm_prof_samples_valid = rm_prof_samples
                 plot_valid_samples = None
-            rm_prof_meas = np.mean(rm_prof_samples_valid)
-            rm_prof_unc = np.std(rm_prof_samples_valid)
+            rm_prof_meas = np.nanmean(rm_prof_samples_valid)
+            rm_prof_unc = np.nanstd(rm_prof_samples_valid)
             rm_prof_qty = (rm_prof_meas, rm_prof_unc)
             results["RM_prof"] = rm_prof_meas
             results["RM_prof_unc"] = rm_prof_unc
@@ -259,8 +266,8 @@ def main(
             rm_prof_qty = None
 
         if meas_rm_scat:
-            rm_scat_meas = np.mean(rm_scat_samples)
-            rm_scat_unc = np.std(rm_scat_samples)
+            rm_scat_meas = np.nanmean(rm_scat_samples)
+            rm_scat_unc = np.nanstd(rm_scat_samples)
             results["RM_scat"] = rm_scat_meas
             results["RM_scat_unc"] = rm_scat_unc
 
