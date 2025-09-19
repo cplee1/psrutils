@@ -67,9 +67,16 @@ logger = logging.getLogger(__name__)
 @click.option("--meas_rm_prof", is_flag=True, help="Measure RM_prof.")
 @click.option("--meas_rm_scat", is_flag=True, help="Measure RM_scat.")
 @click.option(
-    "--mask_zero_peak",
+    "--mask_zero_peak_hwhm",
     is_flag=True,
-    help="Ignore measurements that fall within the zero-peak.",
+    help="Ignore measurements with a Faraday depth less than the HWHM of the "
+    + "RMSF at zero.",
+)
+@click.option(
+    "--mask_zero_peak_fwhm",
+    is_flag=True,
+    help="Ignore measurements with a Faraday depth less than the FWHM of the "
+    + "RMSF at zero.",
 )
 @click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
 @click.option("--get_rm_iono", is_flag=True, help="Get the ionospheric RM.")
@@ -112,7 +119,8 @@ def main(
     clean_cutoff: float,
     meas_rm_prof: bool,
     meas_rm_scat: bool,
-    mask_zero_peak: bool,
+    mask_zero_peak_hwhm: bool,
+    mask_zero_peak_fwhm: bool,
     meas_widths: bool,
     get_rm_iono: bool,
     no_clean: bool,
@@ -187,14 +195,25 @@ def main(
     results["RM_search_limit"] = rmlim
     results["RM_search_resolution"] = rmres
     phi = np.arange(-1.0 * rmlim, rmlim + rmres, rmres)
-    if len(profile.overest_onpulse_bins) == 0:
+    try:
+        if len(profile.overest_onpulse_bins) == 0:
+            onpulse_bins = None
+        else:
+            onpulse_bins = profile.overest_onpulse_bins
+        if len(profile.offpulse_bins) == 0:
+            offpulse_bins = None
+        else:
+            offpulse_bins = profile.offpulse_bins
+    except AttributeError:
+        # If no maxima were found
         onpulse_bins = None
-    else:
-        onpulse_bins = profile.overest_onpulse_bins
-    if len(profile.offpulse_bins) == 0:
         offpulse_bins = None
+    if mask_zero_peak_fwhm:
+        mask_zero_peak = "fwhm"
+    elif mask_zero_peak_hwhm:
+        mask_zero_peak = "hwhm"
     else:
-        offpulse_bins = profile.offpulse_bins
+        mask_zero_peak = None
     rmsyn_result = psrutils.rm_synthesis(
         cube,
         phi,
@@ -300,15 +319,16 @@ def main(
 
     meas_delta_vi = True
     if meas_delta_vi:
-        delta_vi = psrutils.get_delta_vi(
-            cube, onpulse_bins=profile.overest_onpulse_bins
-        )
+        delta_vi = psrutils.get_delta_vi(cube, onpulse_bins=onpulse_bins)
         if save_phase_resolved:
             results["delta_V_I"] = delta_vi
 
     # If there is no offpulse, then default to using the whole profile
-    onpp = profile.overest_onpulse_pairs
-    if len(onpp) == 1 and onpp[0][0] == onpp[0][1]:
+    try:
+        onpp = profile.overest_onpulse_pairs
+        if len(onpp) == 1 and onpp[0][0] == onpp[0][1]:
+            onpp = None
+    except AttributeError:
         onpp = None
 
     psrutils.plotting.plot_2d_fdf(

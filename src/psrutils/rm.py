@@ -96,9 +96,6 @@ def _measure_rm(
 ) -> Tuple[float, float]:
     """Measure the RM and its statistical uncertainty from a FDF.
 
-    If both 'res' and 'rmsf_fwhm' are provided, will compute analytic uncertainty
-    based on the S/N in the FDF.
-
     Parameters
     ----------
     phi : `NDArray`
@@ -200,9 +197,13 @@ def rm_synthesis(
         Default: `None`.
     offpulse_bins : `NDArray`, optional
         The bin indices of the offpulse window. Default: `None`.
-    mask_zero_peak : `bool`, optional
-        Ignore samples that fall within the zero-peak.
+    mask_zero_peak : `str`, optional
+        If "fwhm", ignore samples with a Faraday less than the FWHM of the RMSF.
+        If "hwhm", ignore samples with a Faraday less than the HWHM of the RMSF.
     """
+    if mask_zero_peak is not None and mask_zero_peak not in ["fwhm", "hwhm"]:
+        raise ValueError(f"Invalid choice of mask_zero_peak: {mask_zero_peak}")
+
     # Compute squared wavelengths and reference squared wavelength
     l2 = cube.lambda_sq
     l2_0 = np.mean(l2)
@@ -234,7 +235,11 @@ def rm_synthesis(
     )
 
     # Only define this variable if you want to mask the zero-peak
-    if mask_zero_peak:
+    if mask_zero_peak == "fwhm":
+        logger.info("Masking samples < FWHM of RMSF")
+        zp_hwhm = rmsf_fwhm
+    elif mask_zero_peak == "hwhm":
+        logger.info("Masking samples < HWHM of RMSF")
         zp_hwhm = rmsf_fwhm / 2
     else:
         zp_hwhm = None
