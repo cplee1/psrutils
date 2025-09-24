@@ -353,6 +353,23 @@ def main(
         dark_mode=dark_mode,
     )
 
+    # psrutils.plotting.plot_2d_fdf_rankin(
+    #     cube,
+    #     np.abs(cln_fdf),
+    #     phi,
+    #     rmsf_fwhm=rm_stats["rmsf_fwhm"],
+    #     phi_0_range=(-1, 1),
+    #     phi_1_range=(-3, -2),
+    #     onpulse_pairs=onpp,
+    #     cln_comps=cln_comps,
+    #     phase_range=phase_plotlim,
+    #     phi_range=phi_plotlim,
+    #     p0_cutoff=p0_cutoff,
+    #     bin_func=psrutils.centre_offset_degrees,
+    #     savename=f"{cube.source}_fdf_rankin",
+    #     save_pdf=save_pdf,
+    # )
+
     if plot_pol_prof:
         psrutils.plotting.plot_pol_profile(
             cube,

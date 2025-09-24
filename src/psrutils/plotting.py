@@ -98,6 +98,7 @@ def _add_pol_profile_to_axes(
     cube: StokesCube,
     ax_prof: Axes | None = None,
     ax_pa: Axes | None = None,
+    ax_frac: Axes | None = None,
     normalise: bool = True,
     p0_cutoff: float | None = 3.0,
     voffset: float = 0.0,
@@ -106,6 +107,7 @@ def _add_pol_profile_to_axes(
     L_colour: str = "tab:red",
     V_colour: str = "tab:blue",
     PA_colour: str = "k",
+    frac_colour: str = "k",
     **plot_kwargs,
 ) -> tuple[NDArray[np.float64], PolProfile]:
     # Get an array of bins in the desired units
@@ -139,14 +141,14 @@ def _add_pol_profile_to_axes(
             zorder=10,
             **plot_kwargs,
         )
-        ax_prof.plot(
-            bins,
-            pol_profile.iquv[3] / norm_const + voffset,
-            linestyle=":",
-            color=V_colour,
-            zorder=9,
-            **plot_kwargs,
-        )
+        # ax_prof.plot(
+        #     bins,
+        #     pol_profile.iquv[3] / norm_const + voffset,
+        #     linestyle=":",
+        #     color=V_colour,
+        #     zorder=9,
+        #     **plot_kwargs,
+        # )
 
     if isinstance(ax_pa, Axes):
         pa_mask = pol_profile.p0_l > p0_cutoff
@@ -170,6 +172,17 @@ def _add_pol_profile_to_axes(
                 capsize=0,
                 **plot_kwargs,
             )
+
+    if isinstance(ax_frac, Axes):
+        ax_frac.errorbar(
+            x=bins,
+            y=pol_profile.l_true / (pol_profile.iquv[0]),
+            marker="none",
+            linestyle="-",
+            color=frac_colour,
+            ms=1,
+            **plot_kwargs,
+        )
 
     return bins, pol_profile
 
@@ -317,7 +330,7 @@ def plot_pol_profile(
         cube,
         ax_prof=ax_prof,
         ax_pa=ax_pa,
-        normalise=False,
+        normalise=True,
         p0_cutoff=p0_cutoff,
         linewidth=lw,
     )
@@ -404,7 +417,8 @@ def plot_pol_profile(
     ax_prof.text(
         0.025 + text_shift,
         0.95,
-        f"{cube.source}",
+        "B1451$-$68",
+        # f"{cube.source}",
         horizontalalignment="left",
         verticalalignment="top",
         transform=ax_prof.transAxes,
@@ -448,8 +462,10 @@ def plot_pol_profile(
     if ax_dv is not None:
         ax_dv.set_ylabel("$\Delta(V/I)$")
     ax_prof.set_xlabel("Pulse Phase")
-    ax_prof.set_ylabel("Flux Density\n[arbitrary units]")
-    ax_pa.set_ylabel("P.A.\n[deg]")
+    # ax_prof.set_ylabel("Flux Density\n[arbitrary units]")
+    # ax_pa.set_ylabel("P.A.\n[deg]")
+    ax_prof.set_ylabel("Normalised Intensity")
+    ax_pa.set_ylabel("P.A. (deg)")
 
     fig.align_ylabels()
 
@@ -465,7 +481,9 @@ def plot_pol_profile(
     if save_data:
         header1 = f"source: {cube.source}"
         header2 = f"rmsf_fwhm: {rmsf_fwhm}"
-        if rm_prof_qty is not None and rm_prof_qty[1] < rmsf_fwhm:
+        if rm_prof_qty[1] is None:
+            header3 = f"rm_prof: {rm_prof_qty[0]}"
+        elif rm_prof_qty[1] < rmsf_fwhm:
             header3 = f"rm_prof: {rm_prof_qty[0]} +- {rm_prof_qty[1]}"
         else:
             header3 = "rm_prof: nan +- nan"
@@ -877,6 +895,233 @@ def plot_2d_fdf(
         fig.align_ylabels([ax_fdf_2d, ax_pa])
     else:
         ax_fdf_2d.set_xlabel(xlab)
+    ax_fdf_2d.set_ylabel("Faraday Depth, $\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
+
+    logger.info(f"Saving plot file: {savename}.png")
+    fig.savefig(savename + ".png")
+
+    if save_pdf:
+        logger.info(f"Saving plot file: {savename}.pdf")
+        fig.savefig(savename + ".pdf")
+
+    plt.close()
+
+
+def plot_2d_fdf_rankin(
+    cube: StokesCube,
+    fdf_amp_2D: NDArray,
+    phi: NDArray,
+    rmsf_fwhm: float,
+    phi_0_range: tuple[float, float],
+    phi_1_range: tuple[float, float],
+    onpulse_pairs: list | None = None,
+    cln_comps: NDArray | None = None,
+    phase_range: tuple[float, float] | None = None,
+    phi_range: tuple[float, float] | None = None,
+    p0_cutoff: float | None = 3.0,
+    bin_func: Callable[[NDArray], NDArray] | None = None,
+    savename: str = "fdf",
+    save_pdf: bool = False,
+) -> None:
+    assert phi_0_range[1] > phi_0_range[0]
+    assert phi_1_range[1] > phi_1_range[0]
+
+    if onpulse_pairs is None:
+        fdf_amp_1D = fdf_amp_2D.mean(0)
+    else:
+        onpulse_mask = get_profile_mask_from_pairs(cube.num_bin, onpulse_pairs)
+        fdf_amp_1D = fdf_amp_2D[onpulse_mask].mean(0)
+
+    # Get FDF in the specified ranges
+    fdf_amp_1D_0 = np.where(
+        np.logical_and(phi > phi_0_range[0], phi < phi_0_range[1]), fdf_amp_1D, np.nan
+    )
+    fdf_amp_1D_1 = np.where(
+        np.logical_and(phi > phi_1_range[0], phi < phi_1_range[1]), fdf_amp_1D, np.nan
+    )
+
+    # Find the peaks in those ranges
+    phi_0 = phi[np.nanargmax(fdf_amp_1D_0)]
+    phi_1 = phi[np.nanargmax(fdf_amp_1D_1)]
+    logger.info(f"phi_0 = {phi_0}")
+    logger.info(f"phi_1 = {phi_1}")
+
+    # Styles
+    lw = 0.7
+    line_col = "k"
+    cmap_name = "arctic_r"
+
+    # Define Figure and Axes
+    fig = plt.figure(figsize=(7, 8.5), layout="tight")
+    gs = gridspec.GridSpec(
+        ncols=2,
+        nrows=4,
+        figure=fig,
+        height_ratios=(1.1, 1.1, 1.1, 3),
+        width_ratios=(2.5, 1),
+        hspace=0,
+        wspace=0,
+    )
+    ax_frac = fig.add_subplot(gs[0, 0])
+    ax_prof_0 = fig.add_subplot(gs[1, 0])
+    ax_prof_1 = fig.add_subplot(gs[2, 0])
+    ax_fdf_2d = fig.add_subplot(gs[3, 0])
+    ax_fdf_1d = fig.add_subplot(gs[3, 1])
+
+    # Plot pulse profile
+    ax_prof_0.axhline(y=0, linewidth=lw, linestyle=":", color="k")
+    ax_prof_1.axhline(y=0, linewidth=lw, linestyle=":", color="k")
+    cube.defaraday(phi_0)
+    bins, _ = _add_pol_profile_to_axes(
+        cube,
+        ax_prof=ax_prof_0,
+        ax_pa=None,
+        ax_frac=ax_frac,
+        normalise=True,
+        p0_cutoff=p0_cutoff,
+        bin_func=bin_func,
+        lw=lw,
+        frac_colour="tab:red",
+        label="$\\phi_1$",
+    )
+    ax_prof_0.text(
+        0.03,
+        0.91,
+        f"$\\phi_1={phi_0:.2f}\\,\\mathrm{{rad}}\\,\\mathrm{{m}}^{{-2}}$",
+        horizontalalignment="left",
+        verticalalignment="top",
+        transform=ax_prof_0.transAxes,
+    )
+    cube.defaraday(phi_1)
+    _add_pol_profile_to_axes(
+        cube,
+        ax_prof=ax_prof_1,
+        ax_pa=None,
+        ax_frac=ax_frac,
+        normalise=True,
+        p0_cutoff=p0_cutoff,
+        bin_func=bin_func,
+        lw=lw,
+        frac_colour="tab:blue",
+        label="$\\phi_2$",
+    )
+    ax_prof_1.text(
+        0.03,
+        0.91,
+        f"$\\phi_2={phi_1:.2f}\\,\\mathrm{{rad}}\\,\\mathrm{{m}}^{{-2}}$",
+        horizontalalignment="left",
+        verticalalignment="top",
+        transform=ax_prof_1.transAxes,
+    )
+    # ax_frac.legend(loc="upper left")
+    ax_frac.legend(loc="upper left", bbox_to_anchor=(1, 1), fontsize=10)
+
+    # Plot 1D FDF
+    ax_fdf_1d.plot(fdf_amp_1D, phi, color=line_col, linewidth=lw)
+
+    # Plot RM=0 + uncertainty region
+    xlims = ax_fdf_1d.get_xlim()
+    y1 = [0 - rmsf_fwhm / 2.0] * 2
+    y2 = [0 + rmsf_fwhm / 2.0] * 2
+    ax_fdf_1d.fill_between(
+        xlims, y1, y2, color=line_col, alpha=0.1, zorder=0, label="$\delta\phi$"
+    )
+    ax_fdf_1d.set_xlim(xlims)
+
+    ax_fdf_1d.axhline(y=0, linewidth=lw, linestyle=":", color="k", label="$\\phi=0$")
+
+    ax_fdf_1d.axhline(
+        y=phi_0, linewidth=lw, linestyle="--", color="k", label="$\\phi_1$"
+    )
+    ax_fdf_1d.axhline(
+        y=phi_1, linewidth=lw, linestyle="-.", color="k", label="$\\phi_2$"
+    )
+
+    ax_fdf_1d.legend(loc="lower right", fontsize=10)
+
+    # Plot 2D FDF
+    cmap = plt.get_cmap(f"cmr.{cmap_name}")
+    ax_fdf_2d.imshow(
+        np.transpose(fdf_amp_2D).astype(float),
+        origin="lower",
+        extent=(bins[0], bins[-1], phi[0], phi[-1]),
+        aspect="auto",
+        cmap=cmap,
+        interpolation="none",
+    )
+    if cln_comps is not None:
+        for bin_idx in range(bins.size):
+            cln_comps_bin = np.abs(cln_comps[bin_idx])
+            fd_bin_idx = np.arange(cln_comps_bin.size, dtype=int)
+            fd_bin_idx_nonzero = fd_bin_idx[cln_comps_bin > 0.0]
+            ax_fdf_2d.errorbar(
+                x=[bins[bin_idx]] * len(fd_bin_idx_nonzero),
+                y=phi[fd_bin_idx_nonzero],
+                color="tab:red",
+                marker="o",
+                mec="none",
+                ms=1.5,
+                linestyle="none",
+            )
+
+    # Phase limits
+    if phase_range is None:
+        phase_range = (0, 1)
+
+    # Convert phase units
+    if bin_func is not None:
+        phase_range = (bin_func(phase_range[0]), bin_func(phase_range[1]))
+
+    for iax in [ax_fdf_2d, ax_prof_0, ax_prof_1, ax_frac]:
+        if iax is not None:
+            iax.set_xlim(phase_range)
+
+    # Faraday depth limits
+    if phi_range is None:
+        phi_range = [phi[0], phi[-1]]
+    for iax in [ax_fdf_1d, ax_fdf_2d]:
+        iax.set_ylim(phi_range)
+
+    # Other y limits
+    ax_frac.set_ylim([-0.1, 1.1])
+    ax_prof_0.set_ylim([-0.1, 1.1])
+    ax_prof_1.set_ylim([-0.1, 1.1])
+
+    # Tick locations
+    ax_fdf_1d.set_xticks([])
+    ax_prof_0.set_yticks([0, 0.5, 1])
+    ax_prof_1.set_yticks([0, 0.5, 1])
+    ax_frac.set_yticks([0, 0.5, 1])
+
+    # Tick labels
+    ax_fdf_1d.set_yticklabels([])
+    ax_prof_0.set_xticklabels([])
+    ax_prof_1.set_xticklabels([])
+    ax_frac.set_xticklabels([])
+
+    # Tick configuration
+    ax_fdf_2d.tick_params(which="both", right=True, top=True)
+    for iax in [ax_prof_0, ax_prof_1, ax_fdf_1d, ax_fdf_2d]:
+        if iax is not None:
+            iax.minorticks_on()
+            iax.tick_params(axis="both", which="both", direction="in")
+            iax.tick_params(axis="both", which="major", length=4)
+            iax.tick_params(axis="both", which="minor", length=2)
+
+    # Labels
+    ax_frac.set_ylabel("Frac. Linear")
+    ax_prof_0.set_ylabel("Profile")
+    ax_prof_1.set_ylabel("Profile")
+    fig.align_ylabels([ax_frac, ax_prof_0, ax_prof_1, ax_fdf_2d])
+
+    if bin_func is not None:
+        # Assume degrees
+        xlab = "Pulse Longitude [deg]"
+    else:
+        xlab = "Pulse Phase"
+
+    ax_fdf_2d.set_xlabel(xlab)
+
     ax_fdf_2d.set_ylabel("Faraday Depth, $\phi$ [$\mathrm{rad}\,\mathrm{m}^{-2}$]")
 
     logger.info(f"Saving plot file: {savename}.png")
