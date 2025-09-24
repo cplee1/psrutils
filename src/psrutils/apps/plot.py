@@ -5,6 +5,7 @@
 from typing import Tuple
 
 import click
+import numpy as np
 
 import psrutils
 
@@ -26,6 +27,7 @@ import psrutils
 @click.option(
     "-S", "plot_pol_prof", is_flag=True, help="Plot a full-Stokes pulse profile."
 )
+@click.option("-C", "centre", is_flag=True, help="Centre the pulse profile in phase.")
 @click.option(
     "-t", "tscr", type=int, help="Tscrunch to this number of sub-integrations."
 )
@@ -40,6 +42,7 @@ def main(
     plot_fvsp: bool,
     plot_prof: bool,
     plot_pol_prof: bool,
+    centre: bool,
     tscr: int,
     fscr: int,
     bscr: int,
@@ -56,6 +59,10 @@ def main(
         bscrunch=bscr,
         rotate_phase=rotate,
     )
+
+    if centre:
+        rot_phase = (np.argmax(cube.profile) - cube.num_bin // 2) / cube.num_bin
+        cube.rotate_phase(rot_phase)
 
     if plot_tvsp:
         psrutils.plotting.plot_time_phase(cube)
