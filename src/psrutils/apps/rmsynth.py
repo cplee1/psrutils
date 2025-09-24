@@ -269,9 +269,13 @@ def main(
                 plot_valid_samples = None
             rm_prof_meas = np.nanmean(rm_prof_samples_valid)
             rm_prof_unc = np.nanstd(rm_prof_samples_valid)
-            rm_prof_qty = (rm_prof_meas, rm_prof_unc)
-            results["RM_prof"] = rm_prof_meas
-            results["RM_prof_unc"] = rm_prof_unc
+            if np.isnan(rm_prof_meas) or np.isnan(rm_prof_meas):
+                logger.error("Could not measure RM_prof.")
+                rm_prof_qty = None
+            else:
+                rm_prof_qty = (rm_prof_meas, rm_prof_unc)
+                results["RM_prof"] = rm_prof_meas
+                results["RM_prof_unc"] = rm_prof_unc
 
             psrutils.plotting.plot_rm_hist(
                 rm_prof_samples,
@@ -299,8 +303,12 @@ def main(
     else:
         rm_phi_qty = (rm_phi_samples, None)
         if meas_rm_prof:
-            rm_prof_qty = (rm_prof_samples, None)
-            results["RM_prof"] = rm_prof_samples
+            if np.isnan(rm_prof_samples):
+                logger.error("Could not measure RM_prof.")
+                rm_prof_qty = None
+            else:
+                rm_prof_qty = (rm_prof_samples, None)
+                results["RM_prof"] = rm_prof_samples
         else:
             rm_prof_qty = None
         peak_mask = None
