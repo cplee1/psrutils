@@ -5,6 +5,7 @@
 from typing import Any
 
 import numpy as np
+from psrqpy import QueryATNF
 
 __all__ = ["pythonise"]
 
@@ -42,3 +43,12 @@ def pythonise(var: Any) -> Any:
         case _:
             output = var
     return output
+
+
+def jname_to_name(jname: str) -> str:
+    if jname.startswith("B"):
+        # Already a B-name
+        return jname
+    cat_table = QueryATNF(params=["PSRJ", "NAME"]).table
+    cat_table.add_index("PSRJ")
+    return str(cat_table.loc[jname]["NAME"])

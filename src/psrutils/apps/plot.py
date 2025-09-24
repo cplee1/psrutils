@@ -29,6 +29,12 @@ import psrutils
 )
 @click.option("-C", "centre", is_flag=True, help="Centre the pulse profile in phase.")
 @click.option(
+    "-N",
+    "normalise",
+    is_flag=True,
+    help="Normalise the pulse profile by the peak intensity.",
+)
+@click.option(
     "-t", "tscr", type=int, help="Tscrunch to this number of sub-integrations."
 )
 @click.option("-f", "fscr", type=int, help="Fscrunch to this number of channels.")
@@ -43,6 +49,7 @@ def main(
     plot_prof: bool,
     plot_pol_prof: bool,
     centre: bool,
+    normalise: bool,
     tscr: int,
     fscr: int,
     bscr: int,
@@ -69,6 +76,8 @@ def main(
     if plot_fvsp:
         psrutils.plotting.plot_freq_phase(cube)
     if plot_prof:
-        psrutils.plotting.plot_profile(cube)
+        psrutils.plotting.plot_profile(cube, normalise=normalise)
     if plot_pol_prof:
-        psrutils.plotting.plot_pol_profile(cube, phase_range=phase_plotlim)
+        psrutils.plotting.plot_pol_profile(
+            cube, normalise=normalise, phase_range=phase_plotlim
+        )

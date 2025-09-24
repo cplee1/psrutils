@@ -16,6 +16,7 @@ from matplotlib.axes import Axes
 from numpy.typing import NDArray
 
 from .cube import StokesCube
+from .misc import jname_to_name
 from .polarisation import PolProfile, get_bias_corrected_pol_profile
 from .profile import get_profile_mask_from_pairs
 
@@ -177,6 +178,7 @@ def _add_pol_profile_to_axes(
 def plot_profile(
     cube: StokesCube,
     pol: int = 0,
+    normalise: bool = False,
     savename: str = "profile",
     save_pdf: bool = False,
 ) -> None:
@@ -200,12 +202,15 @@ def plot_profile(
     fig, ax = plt.subplots(tight_layout=True)
 
     bins, _ = _add_profile_to_axes(
-        cube, ax, normalise=False, color="k", linewidth=1, label="Profile"
+        cube, ax, normalise=normalise, color="k", linewidth=1, label="Profile"
     )
     ax.axhline(0, linestyle=":", linewidth=1.2, color="k", alpha=0.3)
     ax.set_xlim([bins[0], bins[-1]])
     ax.set_xlabel("Pulse Phase")
-    ax.set_ylabel("Flux Density [arb. units]")
+    if normalise:
+        ax.set_ylabel("Flux Density")
+    else:
+        ax.set_ylabel("Normalised Intensity")
 
     logger.info(f"Saving plot file: {savename}.png")
     fig.savefig(savename + ".png")
@@ -219,6 +224,7 @@ def plot_profile(
 
 def plot_pol_profile(
     cube: StokesCube,
+    normalise: bool = False,
     rmsf_fwhm: float | None = None,
     rm_phi_qty: tuple[NDArray, NDArray] | None = None,
     rm_prof_qty: tuple[float, float] | None = None,
@@ -317,7 +323,7 @@ def plot_pol_profile(
         cube,
         ax_prof=ax_prof,
         ax_pa=ax_pa,
-        normalise=False,
+        normalise=normalise,
         p0_cutoff=p0_cutoff,
         linewidth=lw,
     )
@@ -404,7 +410,7 @@ def plot_pol_profile(
     ax_prof.text(
         0.025 + text_shift,
         0.95,
-        f"{cube.source}",
+        f"{jname_to_name(cube.source).replace('-', '$-$')}",
         horizontalalignment="left",
         verticalalignment="top",
         transform=ax_prof.transAxes,
@@ -448,8 +454,11 @@ def plot_pol_profile(
     if ax_dv is not None:
         ax_dv.set_ylabel("$\Delta(V/I)$")
     ax_prof.set_xlabel("Pulse Phase")
-    ax_prof.set_ylabel("Flux Density\n[arbitrary units]")
-    ax_pa.set_ylabel("P.A.\n[deg]")
+    if normalise:
+        ax_prof.set_ylabel("Normalised Intensity")
+    else:
+        ax_prof.set_ylabel("Flux Density")
+    ax_pa.set_ylabel("P.A. [deg]")
 
     fig.align_ylabels()
 
@@ -716,7 +725,7 @@ def plot_2d_fdf(
     ax_prof.text(
         0.03,
         0.91,
-        f"{cube.source.replace('-', '$-$')}",
+        f"{jname_to_name(cube.source).replace('-', '$-$')}",
         horizontalalignment="left",
         verticalalignment="top",
         transform=ax_prof.transAxes,
