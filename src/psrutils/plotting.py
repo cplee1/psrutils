@@ -669,6 +669,7 @@ def plot_2d_fdf(
         Use a black background and white lines. Default: `False`.
     """
     if rm_prof_qty is not None:
+        logger.debug(f"Correcting Faraday rotation at RM={rm_prof_qty[0]}")
         cube.defaraday(rm_prof_qty[0])
 
     if onpulse_pairs is None:
