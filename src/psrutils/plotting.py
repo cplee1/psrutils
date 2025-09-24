@@ -474,7 +474,11 @@ def plot_pol_profile(
     if save_data:
         header1 = f"source: {cube.source}"
         header2 = f"rmsf_fwhm: {rmsf_fwhm}"
-        if rm_prof_qty is not None and rm_prof_qty[1] < rmsf_fwhm:
+        if rm_prof_qty is None:
+            header3 = "rm_prof: nan +/- nan"
+        elif rm_prof_qty[1] is None:
+            header3 = f"rm_prof: {rm_prof_qty[0]}"
+        elif rm_prof_qty[1] < rmsf_fwhm:
             header3 = f"rm_prof: {rm_prof_qty[0]} +- {rm_prof_qty[1]}"
         else:
             header3 = "rm_prof: nan +- nan"
