@@ -27,6 +27,12 @@ import psrutils
 @click.option(
     "-S", "plot_pol_prof", is_flag=True, help="Plot a full-Stokes pulse profile."
 )
+@click.option(
+    "-P",
+    "plot_pol_frac",
+    is_flag=True,
+    help="Plot the fractional degree of polarisation.",
+)
 @click.option("-C", "centre", is_flag=True, help="Centre the pulse profile in phase.")
 @click.option(
     "-N",
@@ -48,6 +54,7 @@ def main(
     plot_fvsp: bool,
     plot_prof: bool,
     plot_pol_prof: bool,
+    plot_pol_frac: bool,
     centre: bool,
     normalise: bool,
     tscr: int,
@@ -79,5 +86,8 @@ def main(
         psrutils.plotting.plot_profile(cube, normalise=normalise)
     if plot_pol_prof:
         psrutils.plotting.plot_pol_profile(
-            cube, normalise=normalise, phase_range=phase_plotlim
+            cube,
+            normalise=normalise,
+            phase_range=phase_plotlim,
+            plot_pol_frac=plot_pol_frac,
         )

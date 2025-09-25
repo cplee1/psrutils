@@ -36,6 +36,12 @@ class PolProfile(NamedTuple):
     """(4, Nbin) array containing Stokes I/Q/U/V."""
     l_true: NDArray[np.float64]
     """(1, Nbin) array containing the Stokes L."""
+    l_frac: NDArray[np.float64]
+    """(2, Nbin) array containing the fractional linear polarisation L/I and
+    uncertainty."""
+    v_frac: NDArray[np.float64]
+    """(2, Nbin) array containing the fractional circular polarisation |V|/I and
+    uncertainty."""
     pa: NDArray[np.float64]
     """(2, Nbin) array containing the position angle value and uncertainty."""
     p0_l: NDArray[np.float64]
@@ -87,6 +93,18 @@ def get_bias_corrected_pol_profile(
         -np.sqrt(np.abs(l_meas**2 - sigma_i**2)),
     )
 
+    # Bias-corrected fractional L
+    l_frac = np.empty(shape=(2, iquv.shape[1]), dtype=np.float64)
+    l_frac[0, :] = l_true / iquv[0]
+    l_frac[1, :] = np.abs(l_true / iquv[0] * (sigma_i / l_true + sigma_i / iquv[0]))
+
+    # Fractional V
+    v_frac = np.empty(shape=(2, iquv.shape[1]), dtype=np.float64)
+    v_frac[0, :] = np.abs(iquv[3]) / iquv[0]
+    v_frac[1, :] = np.abs(
+        np.abs(iquv[3]) / iquv[0] * (sigma_i / np.abs(iquv[3]) + sigma_i / iquv[0])
+    )
+
     # Bias-corrected polarisation measures
     p0_l: NDArray[np.float64] = l_true / sigma_i
     p0_v: NDArray[np.float64] = iquv[3] / sigma_i
@@ -103,7 +121,7 @@ def get_bias_corrected_pol_profile(
     )
     pa = np.rad2deg(pa)
 
-    return PolProfile(iquv, l_true, pa, p0_l, p0_v, sigma_i)
+    return PolProfile(iquv, l_true, l_frac, v_frac, pa, p0_l, p0_v, sigma_i)
 
 
 def lookup_sigma_pa(p0_meas: NDArray[np.floating]) -> NDArray[np.float64]:

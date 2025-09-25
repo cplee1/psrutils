@@ -99,7 +99,9 @@ def _add_pol_profile_to_axes(
     cube: StokesCube,
     ax_prof: Axes | None = None,
     ax_pa: Axes | None = None,
+    ax_frac: Axes | None = None,
     normalise: bool = True,
+    plot_v: bool = True,
     p0_cutoff: float | None = 3.0,
     voffset: float = 0.0,
     bin_func: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
@@ -107,6 +109,8 @@ def _add_pol_profile_to_axes(
     L_colour: str = "tab:red",
     V_colour: str = "tab:blue",
     PA_colour: str = "k",
+    L_frac_colour: str = "tab:red",
+    V_frac_colour: str = "tab:blue",
     **plot_kwargs,
 ) -> tuple[NDArray[np.float64], PolProfile]:
     # Get an array of bins in the desired units
@@ -140,14 +144,15 @@ def _add_pol_profile_to_axes(
             zorder=10,
             **plot_kwargs,
         )
-        ax_prof.plot(
-            bins,
-            pol_profile.iquv[3] / norm_const + voffset,
-            linestyle=":",
-            color=V_colour,
-            zorder=9,
-            **plot_kwargs,
-        )
+        if plot_v:
+            ax_prof.plot(
+                bins,
+                pol_profile.iquv[3] / norm_const + voffset,
+                linestyle=":",
+                color=V_colour,
+                zorder=9,
+                **plot_kwargs,
+            )
 
     if isinstance(ax_pa, Axes):
         pa_mask = pol_profile.p0_l > p0_cutoff
@@ -162,8 +167,52 @@ def _add_pol_profile_to_axes(
                 x=bins[pa_mask],
                 y=pol_profile.pa[0, pa_mask] + offset,
                 yerr=pol_profile.pa[1, pa_mask],
+                color=PA_colour,
                 ecolor=PA_colour,
                 marker="none",
+                ms=1,
+                linestyle="none",
+                elinewidth=lw,
+                capthick=lw,
+                capsize=0,
+                **plot_kwargs,
+            )
+
+    if isinstance(ax_frac, Axes):
+        l_frac_mask = np.logical_and(
+            np.where(pol_profile.l_frac[1] / pol_profile.l_frac[0] < 1.0, True, False),
+            np.where(pol_profile.l_frac[0] > 0.0, True, False),
+            np.where(pol_profile.l_frac[0] < 1.0, True, False),
+        )
+        ax_frac.errorbar(
+            x=bins[l_frac_mask],
+            y=pol_profile.l_frac[0, l_frac_mask],
+            yerr=pol_profile.l_frac[1, l_frac_mask],
+            color=L_frac_colour,
+            ecolor=L_frac_colour,
+            marker=".",
+            ms=1,
+            linestyle="none",
+            elinewidth=lw,
+            capthick=lw,
+            capsize=0,
+            **plot_kwargs,
+        )
+        if plot_v:
+            v_frac_mask = np.logical_and(
+                np.where(
+                    pol_profile.v_frac[1] / pol_profile.v_frac[0] < 1.0, True, False
+                ),
+                np.where(pol_profile.v_frac[0] > 0.0, True, False),
+                np.where(pol_profile.v_frac[0] < 1.0, True, False),
+            )
+            ax_frac.errorbar(
+                x=bins[v_frac_mask],
+                y=pol_profile.v_frac[0, v_frac_mask],
+                yerr=pol_profile.v_frac[1, v_frac_mask],
+                color=V_frac_colour,
+                ecolor=V_frac_colour,
+                marker=".",
                 ms=1,
                 linestyle="none",
                 elinewidth=lw,
@@ -225,6 +274,7 @@ def plot_profile(
 def plot_pol_profile(
     cube: StokesCube,
     normalise: bool = False,
+    bin_func: Callable[[NDArray[np.floating]], NDArray[np.floating]] | None = None,
     rmsf_fwhm: float | None = None,
     rm_phi_qty: tuple[NDArray, NDArray] | None = None,
     rm_prof_qty: tuple[float, float] | None = None,
@@ -232,6 +282,8 @@ def plot_pol_profile(
     delta_vi: NDArray | None = None,
     phase_range: tuple[float, float] | None = None,
     p0_cutoff: float | None = 3.0,
+    plot_v: bool = True,
+    plot_pol_frac: bool = False,
     savename: str = "pol_profile",
     save_pdf: bool = False,
     save_data: bool = False,
@@ -243,6 +295,10 @@ def plot_pol_profile(
     ----------
     cube : StokesCube
         A StokesCube object.
+    normalise : bool, default: False
+        Normalise the pulse profile by the peak intensity.
+    bin_func : Callable, default: None
+        A function to transform the bin units from phase into something else.
     rmsf_fwhm : float, default: None
         The FWHM of the RM spread function.
     rm_phi_qty : tuple[NDArray, NDArray], default: None
@@ -258,6 +314,10 @@ def plot_pol_profile(
     p0_cutoff : float, default: 3.0
         Mask all RM and PA measurements below this polarisation measure. If `None` is
         specified then no mask will be applied.
+    plot_v : bool, default: True
+        Plot Stokes V.
+    plot_pol_frac : bool, default: False
+        Plot the fractional polarisation profiles.
     savename : str, default: "pol_profile"
         The name of the plot file excluding the extension.
     save_pdf : bool, default: False
@@ -283,20 +343,36 @@ def plot_pol_profile(
 
     # Define Figure and Axes
     if plot_rm and delta_vi is not None:
+        if plot_pol_frac:
+            logger.error("Cannot plot RM, V/I, and polarisation fractions at once.")
         fig = plt.figure(figsize=(6, 6.5), layout="tight")
         gs = gridspec.GridSpec(
             ncols=1, nrows=4, figure=fig, height_ratios=(1, 1, 1, 3), hspace=0
         )
+        ax_frac = None
         ax_rm = fig.add_subplot(gs[0])
         ax_dv = fig.add_subplot(gs[1])
         ax_pa = fig.add_subplot(gs[2])
         ax_prof = fig.add_subplot(gs[3])
     elif plot_rm:
+        if plot_pol_frac:
+            logger.error("Cannot plot RM and polarisation fractions at once.")
         fig = plt.figure(figsize=(6, 5.6), layout="tight")
         gs = gridspec.GridSpec(
             ncols=1, nrows=3, figure=fig, height_ratios=(1, 1, 3), hspace=0
         )
+        ax_frac = None
         ax_rm = fig.add_subplot(gs[0])
+        ax_dv = None
+        ax_pa = fig.add_subplot(gs[1])
+        ax_prof = fig.add_subplot(gs[2])
+    elif plot_pol_frac:
+        fig = plt.figure(figsize=(6, 6), layout="tight")
+        gs = gridspec.GridSpec(
+            ncols=1, nrows=3, figure=fig, height_ratios=(1, 1, 2), hspace=0
+        )
+        ax_frac = fig.add_subplot(gs[0])
+        ax_rm = None
         ax_dv = None
         ax_pa = fig.add_subplot(gs[1])
         ax_prof = fig.add_subplot(gs[2])
@@ -305,28 +381,35 @@ def plot_pol_profile(
         gs = gridspec.GridSpec(
             ncols=1, nrows=2, figure=fig, height_ratios=(1, 2), hspace=0
         )
+        ax_frac = None
         ax_rm = None
         ax_dv = None
         ax_pa = fig.add_subplot(gs[0])
         ax_prof = fig.add_subplot(gs[1])
 
     # Styles
-    lw = 0.6
+    lw = 0.7
     line_col = "k"
 
     # Phase range to plot
     if phase_range is None:
         phase_range = [0, 1]
+    if bin_func is not None:
+        phase_range = [bin_func(phase_range[0]), bin_func(phase_range[1])]
 
     # Add flux and PA
     bins, pol_profile = _add_pol_profile_to_axes(
         cube,
         ax_prof=ax_prof,
         ax_pa=ax_pa,
+        ax_frac=ax_frac,
         normalise=normalise,
+        plot_v=plot_v,
         p0_cutoff=p0_cutoff,
+        bin_func=bin_func,
         linewidth=lw,
     )
+    # ax_prof.axhline(y=0, color="k", lw=lw, linestyle="--")
 
     lw = 0.7
     caplw = 0.7
@@ -425,14 +508,18 @@ def plot_pol_profile(
     )
 
     # X limits
-    for iax in [ax_rm, ax_dv, ax_pa, ax_prof]:
+    for iax in [ax_frac, ax_rm, ax_dv, ax_pa, ax_prof]:
         if iax is not None:
             iax.set_xlim(phase_range)
 
     # Y limits
     ax_pa.set_ylim([-120, 120])
+    if ax_frac is not None:
+        ax_frac.set_ylim([0.0, 1.0])
 
     # Ticks
+    if ax_frac is not None:
+        ax_frac.set_xticklabels([])
     if plot_rm:
         ax_rm.set_xticklabels([])
     if ax_dv is not None:
@@ -440,7 +527,7 @@ def plot_pol_profile(
     ax_pa.set_xticklabels([])
     ax_pa.set_yticks([-90, 0, 90])
     ax_pa.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(15))
-    for iax in [ax_rm, ax_dv, ax_pa, ax_prof]:
+    for iax in [ax_frac, ax_rm, ax_dv, ax_pa, ax_prof]:
         if iax is not None:
             iax.tick_params(which="both", right=True, top=True)
             iax.minorticks_on()
@@ -449,6 +536,8 @@ def plot_pol_profile(
             iax.tick_params(axis="both", which="minor", length=2)
 
     # Labels
+    if ax_frac is not None:
+        ax_frac.set_ylabel("Frac. Pol.")
     if plot_rm:
         ax_rm.set_ylabel("RM\n[$\mathrm{rad}\,\mathrm{m}^{-2}$]")
     if ax_dv is not None:
@@ -458,7 +547,7 @@ def plot_pol_profile(
         ax_prof.set_ylabel("Normalised Intensity")
     else:
         ax_prof.set_ylabel("Flux Density")
-    ax_pa.set_ylabel("P.A. [deg]")
+    ax_pa.set_ylabel("PPA [deg]")
 
     fig.align_ylabels()
 
@@ -887,7 +976,7 @@ def plot_2d_fdf(
         xlab = "Pulse Phase"
     if plot_pa:
         ax_pa.set_xlabel(xlab)
-        ax_pa.set_ylabel("P.A. [deg]")
+        ax_pa.set_ylabel("PPA [deg]")
         fig.align_ylabels([ax_fdf_2d, ax_pa])
     else:
         ax_fdf_2d.set_xlabel(xlab)
