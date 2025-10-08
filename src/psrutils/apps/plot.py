@@ -40,6 +40,7 @@ import psrutils
     is_flag=True,
     help="Normalise the pulse profile by the peak intensity.",
 )
+@click.option("--longitude", is_flag=True, help="Plot pulse longitude in degrees.")
 @click.option(
     "-t", "tscr", type=int, help="Tscrunch to this number of sub-integrations."
 )
@@ -57,6 +58,7 @@ def main(
     plot_pol_frac: bool,
     centre: bool,
     normalise: bool,
+    longitude: bool,
     tscr: int,
     fscr: int,
     bscr: int,
@@ -78,6 +80,11 @@ def main(
         rot_phase = (np.argmax(cube.profile) - cube.num_bin // 2) / cube.num_bin
         cube.rotate_phase(rot_phase)
 
+    if longitude:
+        bin_func = psrutils.plotting.centre_offset_degrees
+    else:
+        bin_func = None
+
     if plot_tvsp:
         psrutils.plotting.plot_time_phase(cube)
     if plot_fvsp:
@@ -88,6 +95,7 @@ def main(
         psrutils.plotting.plot_pol_profile(
             cube,
             normalise=normalise,
+            bin_func=bin_func,
             phase_range=phase_plotlim,
             plot_pol_frac=plot_pol_frac,
         )

@@ -542,7 +542,10 @@ def plot_pol_profile(
         ax_rm.set_ylabel("RM\n[$\mathrm{rad}\,\mathrm{m}^{-2}$]")
     if ax_dv is not None:
         ax_dv.set_ylabel("$\Delta(V/I)$")
-    ax_prof.set_xlabel("Pulse Phase")
+    if bin_func is centre_offset_degrees:
+        ax_prof.set_xlabel("Pulse Longitude [deg]")
+    else:
+        ax_prof.set_xlabel("Pulse Phase")
     if normalise:
         ax_prof.set_ylabel("Normalised Intensity")
     else:
