@@ -7,6 +7,7 @@ from typing import Any
 
 import click
 import rtoml
+from psrqpy import QueryATNF
 from requests.exceptions import HTTPError
 
 import psrutils
@@ -36,11 +37,23 @@ def main(archive: str, log_level: str) -> None:
     logger.info(f"Loading archive: {archive}")
     cube = psrutils.StokesCube.from_psrchive(archive, False, 1, 1, None, None)
 
+    # Query catalogue to get J-names
+    cat_table = QueryATNF(version="2.7.0", params=["PSRB", "PSRJ"]).table
+    psrb = list(cat_table["PSRB"])
+    psrj = list(cat_table["PSRJ"])
+    if cube.source.startswith("B"):
+        try:
+            jname = psrj[psrb.index(cube.source)]
+        except ValueError:
+            jname = cube.source
+    else:
+        jname = cube.source
+
     psrutils.setup_logger("spinifex", log_level)
 
     try:
         rm_iono, rm_iono_err = psrutils.iono.get_rm_iono(
-            cube, bootstrap_nsamp=int(1e4), savename=f"{cube.source}_rm_iono"
+            cube, bootstrap_nsamp=int(1e4), savename=f"{jname}_rm_iono"
         )
     except HTTPError as e:
         logger.error(e)
@@ -49,6 +62,6 @@ def main(archive: str, log_level: str) -> None:
     results["RM_iono"] = rm_iono
     results["RM_iono_unc"] = rm_iono_err
 
-    logger.info(f"Saving results: {cube.source}_rmiono_results.toml")
-    with open(f"{cube.source}_rmiono_results.toml", "w") as f:
+    logger.info(f"Saving results: {jname}_rmiono_results.toml")
+    with open(f"{jname}_rmiono_results.toml", "w") as f:
         rtoml.dump(psrutils.pythonise(results), f)
