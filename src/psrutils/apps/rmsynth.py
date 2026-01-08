@@ -102,6 +102,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--plot_publn_prof", is_flag=True, help="Plot the profile and spline fit."
 )
+@click.option("--plot_qu", is_flag=True, help="Plot the Stokes Q, U, and PPA spectra.")
 @click.option("--save_pdf", is_flag=True, help="Save plots in PDF format.")
 @click.option(
     "--save_phase_resolved", is_flag=True, help="Save phase-resolved measurements."
@@ -138,6 +139,7 @@ def main(
     plot_pol_prof: bool,
     plot_diagnostics: bool,
     plot_publn_prof: bool,
+    plot_qu: bool,
     save_pdf: bool,
     save_phase_resolved: bool,
     dark_mode: bool,
@@ -230,6 +232,7 @@ def main(
         offpulse_bins=offpulse_bins,
         mask_zero_peak=mask_zero_peak,
         subtract_mean_qu=subtract_mean_qu,
+        plot_qu=plot_qu,
     )
     fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = (
         rmsyn_result

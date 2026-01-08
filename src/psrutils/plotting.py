@@ -1116,13 +1116,14 @@ def plot_qu_spectra(
     Q: NDArray,
     U: NDArray,
     freqs: NDArray,
-    norm_fact: float | None = None,
+    sigma: float | None = None,
+    k: float = 10.0,
+    subtract_mean_qu: bool = False,
     title: str | None = None,
     savename: str = "qu_spectra",
 ) -> None:
-    """Make a figure with four subplots showing Q and U as a function of
-    frequency and plotted against each other, before and after subtracting
-    the mean from Q and U.
+    """Make a figure showing Q and U and the PPA as a function of frequency and
+    Q and U plotted against each other.
 
     Parameters
     ----------
@@ -1130,78 +1131,76 @@ def plot_qu_spectra(
         The Stokes Q and U samples for each channel.
     freqs : `NDArray`
         The centre frequencies for each channel in Hz.
-    norm_fact : `float`, optional
-        The normalisation factor. If None, then use the standard deviation of
-        Stokes L.
+    sigma : `float`, optional
+        A value to use to normalise the Q and U spectra. The plot limits will be
+        set to k*sigma. If None, then use the standard deviation of Stokes L.
+    k : `float`, optional
+        The number of sigma to use as the plot limits. Default: 10.0.
+    subtract_mean_qu : `bool`, optional
+        Subtract the mean from the Q and U spectra before plotting.
+        Default: False.
     title : `str`, optional
         A title for the plot. If None, then no title will be added.
     savename : `str`, optional
         The name of the plot file excluding the extension.
         Default: 'qu_spectra'.
     """
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(10.5, 8), tight_layout=True)
-
     freqs /= 1e6
 
-    if norm_fact is None:
-        norm_fact = np.std(np.sqrt(Q**2 + U**2))
+    if sigma is None:
+        sigma = np.std(np.sqrt(Q**2 + U**2))
 
-    Q /= norm_fact
-    U /= norm_fact
+    # Normalise
+    Q /= sigma
+    U /= sigma
 
-    Q_z = Q - np.mean(Q)
-    U_z = U - np.mean(U)
+    Q_lab = "$Q$ / $\\sigma_L$"
+    U_lab = "$U$ / $\\sigma_L$"
 
-    kw = dict(marker="o", s=6)
+    # Subtract baseline
+    if subtract_mean_qu:
+        Q -= np.mean(Q)
+        U -= np.mean(U)
+        Q_lab = "($Q - \\langle Q \\rangle$) / $\\sigma_L$"
+        U_lab = "($U - \\langle U \\rangle$) / $\\sigma_L$"
 
-    axes[0, 0].scatter(freqs, Q, c="tab:red", label="$Q$ / $\\sigma_L$", **kw)
-    axes[0, 0].scatter(freqs, U, c="tab:blue", label="$U$ / $\\sigma_L$", **kw)
-    axes[0, 0].legend(loc="lower left")
+    fig = plt.figure(figsize=(12, 5.5), tight_layout=True)
+    gs = fig.add_gridspec(2, 2)
+    ax_lt = fig.add_subplot(gs[0, 0])
+    ax_lb = fig.add_subplot(gs[1, 0])
+    ax_r = fig.add_subplot(gs[:, 1])
 
-    axes[1, 0].scatter(
-        freqs, Q_z, c="tab:red", label="($Q - \\langle Q \\rangle$) / $\\sigma_L$", **kw
-    )
-    axes[1, 0].scatter(
-        freqs,
-        U_z,
-        c="tab:blue",
-        label="($U - \\langle U \\rangle$) / $\\sigma_L$",
-        **kw,
-    )
-    axes[1, 0].legend(loc="lower left")
+    ax_lt.scatter(freqs, Q, c="tab:red", label=Q_lab, marker="o", s=6)
+    ax_lt.scatter(freqs, U, c="tab:blue", label=U_lab, marker="o", s=6)
+    ax_lt.axhline(0, color="grey", lw=1)
+    ax_lt.legend(loc="lower left")
+    ax_lt.set_xticklabels([])
+    ax_lt.set_ylim([-k, k])
+    ax_lt.set_ylabel("Normalised Intensity")
+
+    ax_lb.scatter(freqs, np.rad2deg(0.5 * np.arctan2(U, Q)), c="k", marker="o", s=6)
+    ax_lb.axhline(0, color="grey")
+    ax_lb.set_ylim([-90, 90])
+    ax_lb.set_yticks([-90, -45, 0, 45, 90])
+    ax_lb.set_xlabel("Frequency [MHz]")
+    ax_lb.set_ylabel("PPA [deg]")
 
     cmap = plt.get_cmap("cmr.cosmic")
-
-    sc = axes[0, 1].scatter(Q, U, c=freqs, cmap=cmap, **kw)
-    cbar = fig.colorbar(sc, ax=axes[0, 1], location="right")
+    sc = ax_r.scatter(Q, U, c=freqs, cmap=cmap, marker="o", s=6)
+    cbar = fig.colorbar(sc, ax=ax_r, location="right")
     cbar.ax.set_ylabel("Frequency [MHz]")
-
-    sc = axes[1, 1].scatter(Q_z, U_z, c=freqs, cmap=cmap, **kw)
-    cbar = fig.colorbar(sc, ax=axes[1, 1], location="right")
-    cbar.ax.set_ylabel("Frequency [MHz]")
-
-    for ax in axes.flatten():
-        ax.axhline(0, color="grey")
-        ax.set_ylim([-5, 5])
-
-    for ax in axes[:, 1]:
-        ax.axvline(0, color="grey")
-        ax.set_xlim([-5, 5])
-
-    for ax in axes[:, 0]:
-        ax.set_xlabel("Frequency [MHz]")
-
-    axes[0, 1].set_xlabel("$Q$ / $\\sigma_L$")
-    axes[0, 1].set_ylabel("$U$ / $\\sigma_L$")
-
-    axes[1, 1].set_xlabel("($Q - \\langle Q \\rangle$) / $\\sigma_L$")
-    axes[1, 1].set_ylabel("($U - \\langle U \\rangle$) / $\\sigma_L$")
+    ax_r.axhline(0, color="grey")
+    ax_r.axvline(0, color="grey")
+    ax_r.set_xlim([-k, k])
+    ax_r.set_ylim([-k, k])
+    ax_r.set_xlabel(Q_lab)
+    ax_r.set_ylabel(U_lab)
 
     if title is not None:
         fig.suptitle(title)
 
     logger.debug(f"Saving plot file: {savename}.png")
     # The dpi is low to reduce the file size when animating
-    fig.savefig(savename + ".png", dpi=100)
+    fig.savefig(savename + ".png", dpi=150)
 
     plt.close()

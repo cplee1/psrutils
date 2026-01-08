@@ -125,7 +125,7 @@ def rm_synthesis(
     bootstrap_nsamp: int | None = None,
     onpulse_bins: NDArray | None = None,
     offpulse_bins: NDArray | None = None,
-    mask_zero_peak: str = None,
+    mask_zero_peak: str | None = None,
     subtract_mean_qu: bool = False,
     plot_qu: bool = False,
 ) -> None:
@@ -267,7 +267,8 @@ def rm_synthesis(
                     S[1],
                     S[2],
                     cube.freqs,
-                    norm_fact=l_std,
+                    sigma=l_std,
+                    subtract_mean_qu=subtract_mean_qu,
                     title="Longitude "
                     + f"${centre_offset_degrees(bin / (cube.num_bin - 1)):.1f}$",
                     savename=f"qu_spectra_bin_{bin:04d}",
@@ -327,7 +328,14 @@ def rm_synthesis(
         else:
             P = _form_linear(S[1], S[2], subtract_mean_qu)
             if plot_qu:
-                plot_qu_spectra(S[1], S[2], cube.freqs, savename="qu_spectra_phase_avg")
+                plot_qu_spectra(
+                    S[1],
+                    S[2],
+                    cube.freqs,
+                    subtract_mean_qu=subtract_mean_qu,
+                    title="Phase Averaged",
+                    savename="qu_spectra_phase_avg",
+                )
             tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
             rm_scat_samples, _ = _measure_rm(phi, np.abs(tmp_fdf), zp_hwhm)
     else:
