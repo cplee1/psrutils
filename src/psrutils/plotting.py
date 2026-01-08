@@ -30,6 +30,7 @@ __all__ = [
     "plot_2d_fdf",
     "plot_rm_hist",
     "plot_rm_vs_phi",
+    "plot_qu_spectra",
 ]
 
 logger = logging.getLogger(__name__)
@@ -1107,5 +1108,100 @@ def plot_rm_vs_phi(
     if save_pdf:
         logger.info(f"Saving plot file: {savename}.pdf")
         fig.savefig(savename + ".pdf")
+
+    plt.close()
+
+
+def plot_qu_spectra(
+    Q: NDArray,
+    U: NDArray,
+    freqs: NDArray,
+    norm_fact: float | None = None,
+    title: str | None = None,
+    savename: str = "qu_spectra",
+) -> None:
+    """Make a figure with four subplots showing Q and U as a function of
+    frequency and plotted against each other, before and after subtracting
+    the mean from Q and U.
+
+    Parameters
+    ----------
+    Q, U : `NDArray`
+        The Stokes Q and U samples for each channel.
+    freqs : `NDArray`
+        The centre frequencies for each channel in Hz.
+    norm_fact : `float`, optional
+        The normalisation factor. If None, then use the standard deviation of
+        Stokes L.
+    title : `str`, optional
+        A title for the plot. If None, then no title will be added.
+    savename : `str`, optional
+        The name of the plot file excluding the extension.
+        Default: 'qu_spectra'.
+    """
+    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(10.5, 8), tight_layout=True)
+
+    freqs /= 1e6
+
+    if norm_fact is None:
+        norm_fact = np.std(np.sqrt(Q**2 + U**2))
+
+    Q /= norm_fact
+    U /= norm_fact
+
+    Q_z = Q - np.mean(Q)
+    U_z = U - np.mean(U)
+
+    kw = dict(marker="o", s=6)
+
+    axes[0, 0].scatter(freqs, Q, c="tab:red", label="$Q$ / $\\sigma_L$", **kw)
+    axes[0, 0].scatter(freqs, U, c="tab:blue", label="$U$ / $\\sigma_L$", **kw)
+    axes[0, 0].legend(loc="lower left")
+
+    axes[1, 0].scatter(
+        freqs, Q_z, c="tab:red", label="($Q - \\langle Q \\rangle$) / $\\sigma_L$", **kw
+    )
+    axes[1, 0].scatter(
+        freqs,
+        U_z,
+        c="tab:blue",
+        label="($U - \\langle U \\rangle$) / $\\sigma_L$",
+        **kw,
+    )
+    axes[1, 0].legend(loc="lower left")
+
+    cmap = plt.get_cmap("cmr.cosmic")
+
+    sc = axes[0, 1].scatter(Q, U, c=freqs, cmap=cmap, **kw)
+    cbar = fig.colorbar(sc, ax=axes[0, 1], location="right")
+    cbar.ax.set_ylabel("Frequency [MHz]")
+
+    sc = axes[1, 1].scatter(Q_z, U_z, c=freqs, cmap=cmap, **kw)
+    cbar = fig.colorbar(sc, ax=axes[1, 1], location="right")
+    cbar.ax.set_ylabel("Frequency [MHz]")
+
+    for ax in axes.flatten():
+        ax.axhline(0, color="grey")
+        ax.set_ylim([-5, 5])
+
+    for ax in axes[:, 1]:
+        ax.axvline(0, color="grey")
+        ax.set_xlim([-5, 5])
+
+    for ax in axes[:, 0]:
+        ax.set_xlabel("Frequency [MHz]")
+
+    axes[0, 1].set_xlabel("$Q$ / $\\sigma_L$")
+    axes[0, 1].set_ylabel("$U$ / $\\sigma_L$")
+
+    axes[1, 1].set_xlabel("($Q - \\langle Q \\rangle$) / $\\sigma_L$")
+    axes[1, 1].set_ylabel("($U - \\langle U \\rangle$) / $\\sigma_L$")
+
+    if title is not None:
+        fig.suptitle(title)
+
+    logger.debug(f"Saving plot file: {savename}.png")
+    # The dpi is low to reduce the file size when animating
+    fig.savefig(savename + ".png", dpi=100)
 
     plt.close()

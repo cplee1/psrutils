@@ -78,6 +78,11 @@ logger = logging.getLogger(__name__)
     help="Ignore measurements with a Faraday depth less than the FWHM of the "
     + "RMSF at zero.",
 )
+@click.option(
+    "--subtract_mean_qu",
+    is_flag=True,
+    help="Subtrace the mean from Q and U to remove the DC signal.",
+)
 @click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
 @click.option("--get_rm_iono", is_flag=True, help="Get the ionospheric RM.")
 @click.option("--no_clean", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
@@ -121,6 +126,7 @@ def main(
     meas_rm_scat: bool,
     mask_zero_peak_hwhm: bool,
     mask_zero_peak_fwhm: bool,
+    subtract_mean_qu: bool,
     meas_widths: bool,
     get_rm_iono: bool,
     no_clean: bool,
@@ -223,6 +229,7 @@ def main(
         onpulse_bins=onpulse_bins,
         offpulse_bins=offpulse_bins,
         mask_zero_peak=mask_zero_peak,
+        subtract_mean_qu=subtract_mean_qu,
     )
     fdf, rmsf, _, rm_phi_samples, rm_prof_samples, rm_scat_samples, rm_stats = (
         rmsyn_result

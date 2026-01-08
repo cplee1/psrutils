@@ -8,11 +8,11 @@ from typing import Tuple
 import numpy as np
 import scipy.stats as st
 from numpy.typing import NDArray
-from scipy.optimize import curve_fit
 from tqdm import trange
 
 from .cube import StokesCube
 from .kernels import dft_kernel
+from .plotting import centre_offset_degrees, plot_qu_spectra
 
 __all__ = ["rm_synthesis", "rm_clean"]
 
@@ -20,74 +20,29 @@ logger = logging.getLogger(__name__)
 
 
 # TODO: Format docstring
-def _fit_linear_model(freqs: NDArray, amps: NDArray) -> NDArray:
-    """Fit a linear model to spectral data.
+def _form_linear(Q: NDArray, U: NDArray, subtract_mean_qu: bool = False) -> NDArray:
+    """Form the complex linear polarisation vector by first subtracting the
+    baseline from Q and U.
 
     Parameters
     ----------
-    freqs : `NDArray`
-        A list of frequencies.
-    amps : `NDArray`
-        A list of amplitudes corresponding to each frequency.
+    Q, U : `NDArray`
+        The components of linear polarisation.
+    subtract_mean_qu : `bool`
+        Subtract the mean from Q and U.
 
     Returns
     -------
-    model : `NDArray`
-        The fitted linear model evaluated at the given frequencies.
-    """
-    try:
-        par, _ = curve_fit(
-            lambda f, s, a: s * (f / np.mean(f)) ** a,
-            freqs,
-            amps,
-            p0=(np.mean(amps), 0.0),
-        )
-        model = par[0] * (freqs / np.mean(freqs)) ** par[1]
-        logger.debug(f"Spectral index: {par[1]:.3f}")
-    except RuntimeError:
-        logger.debug("Model fit could not converge - falling back to flat model.")
-        model = np.ones_like(freqs) * np.mean(amps)
-    return model
-
-
-# TODO: Format docstring
-def _normalise_spectrum(
-    P: NDArray, S: NDArray, freqs: NDArray, norm: str | None = None
-) -> NDArray:
-    """Normalise the complex linear polarisation by Stokes I.
-
-    Parameters
-    ----------
     P : `NDArray`
         The complex linear polarisation.
-    S : `NDArray`
-        The Stokes I values for each frequency.
-    freqs : `NDArray`
-        The frequencies of each channel.
-    norm : `str`, optional
-        norm : `str`, optional
-        Spectral model subtraction method.
-            'mod' - fit a linear model to Stokes I
-            'val' - use per-channel Stokes I values
-        Default: `None`.
-
-    Returns
-    -------
-    p : `NDArray`
-        The normalised complex linear polarisation.
-    model : `NDArray`
-        The model used, evalued at each frequency.
     """
-    if norm is None:
-        model = np.float64(1.0)
-    elif norm == "mod":
-        # TODO: Check that 'freqs' is in the correct units here
-        model = _fit_linear_model(freqs, S)
-    elif norm == "val":
-        model = S
-    else:
-        raise ValueError("Invalid normalisation method specified.")
-    return P / model, model
+    if subtract_mean_qu:
+        Q -= np.mean(Q)
+        U -= np.mean(U)
+
+    P = Q + 1j * U
+
+    return P
 
 
 # TODO: Format docstring
@@ -165,13 +120,14 @@ def _measure_rm_unc_analytic(
 def rm_synthesis(
     cube: StokesCube,
     phi: NDArray,
-    norm: str | None = None,
     meas_rm_prof: bool = False,
     meas_rm_scat: bool = False,
     bootstrap_nsamp: int | None = None,
     onpulse_bins: NDArray | None = None,
     offpulse_bins: NDArray | None = None,
-    mask_zero_peak: bool = False,
+    mask_zero_peak: str = None,
+    subtract_mean_qu: bool = False,
+    plot_qu: bool = False,
 ) -> None:
     """Perform RM-synthesis for each phase bin.
 
@@ -181,11 +137,6 @@ def rm_synthesis(
         A StokesCube object.
     phi : `NDArray`
         An array of Faraday depths (in rad/m^2) to compute.
-    norm : `str`, optional
-        Spectral model subtraction method.
-            'mod' - fit a linear model to Stokes I
-            'val' - use per-channel Stokes I values
-        Default: `None`.
     meas_rm_prof : `bool`, optional
         Measure RM_prof. Default: `False`.
     meas_rm_scat : `bool`, optional
@@ -200,6 +151,10 @@ def rm_synthesis(
     mask_zero_peak : `str`, optional
         If "fwhm", ignore samples with a Faraday less than the FWHM of the RMSF.
         If "hwhm", ignore samples with a Faraday less than the HWHM of the RMSF.
+    subtract_mean_qu : `bool`, optional
+        Subtract the mean from Q and U. Default: False.
+    plot_qu : `bool`, optional
+        Make plots of Q and U as a function of frequency. Default: False.
     """
     if mask_zero_peak is not None and mask_zero_peak not in ["fwhm", "hwhm"]:
         raise ValueError(f"Invalid choice of mask_zero_peak: {mask_zero_peak}")
@@ -258,29 +213,38 @@ def rm_synthesis(
 
     # Generate a mask for the offpulse
     if offpulse_bins is None or onpulse_bins.size == 0:
-        # Use the whole profile
+        # If no offpulse is given or there is no onpulse, use the whole profile
         offpulse_mask = np.full(cube.num_bin, True)
     else:
         offpulse_mask = np.full(cube.num_bin, False)
         for bin_idx in offpulse_bins:
             offpulse_mask[bin_idx] = True
 
+    # Generate a mask for the onpulse
     if onpulse_bins is None:
-        # Use the whole profile
+        # If no onpulse is given, use the whole profile
+        onpulse_mask = np.full(cube.num_bin, True)
+
+        # We need this array to be defined so we can loop through it later
         onpulse_bins = np.arange(cube.num_bin)
+    else:
+        onpulse_mask = np.full(cube.num_bin, False)
+        for bin_idx in onpulse_bins:
+            onpulse_mask[bin_idx] = True
+
+    # Compute the median standard deviation in the offpulse bin QU spectra
+    masked_data = data[:, :, offpulse_mask]
+    q_std = np.median(masked_data[1].std(0))
+    logger.debug(f"std(Q) ~ {q_std}")
+    u_std = np.median(masked_data[2].std(0))
+    logger.debug(f"std(U) ~ {u_std}")
+    l_std = np.sqrt(q_std**2 + u_std**2)
+    logger.debug(f"std(L) ~ {l_std}")
 
     # Initialise arrays
     tmp_fdf = np.empty(len(phi), dtype=np.complex128)
     tmp_prof_fdf = np.zeros(len(phi), dtype=np.float64)
     if type(bootstrap_nsamp) is int:
-        masked_data = data[:, :, offpulse_mask]
-
-        # Compute the median standard deviation in the bin spectra
-        q_std = np.median(masked_data[1].std(0))
-        logger.debug(f"std(Q) ~ {q_std}")
-        u_std = np.median(masked_data[2].std(0))
-        logger.debug(f"std(U) ~ {u_std}")
-
         rm_phi_samples = np.empty(
             shape=(cube.num_bin, bootstrap_nsamp), dtype=np.float64
         )
@@ -296,7 +260,18 @@ def rm_synthesis(
         K = 1.0 / np.sum(W)
 
         # Perform RM synthesis on the real observed data (for plotting)
-        P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm)
+        P = _form_linear(S[1], S[2], subtract_mean_qu)
+        if plot_qu:
+            if bin in onpulse_bins:
+                plot_qu_spectra(
+                    S[1],
+                    S[2],
+                    cube.freqs,
+                    norm_fact=l_std,
+                    title="Longitude "
+                    + f"${centre_offset_degrees(bin / (cube.num_bin - 1)):.1f}$",
+                    savename=f"qu_spectra_bin_{bin:04d}",
+                )
         rmsf[bin] = dft_kernel(W, rmsf[bin], rmsf_phi, l2, l2_0, K)
         fdf[bin] = dft_kernel(P * W, fdf[bin], phi, l2, l2_0, K)
 
@@ -305,7 +280,7 @@ def rm_synthesis(
             for iter in range(bootstrap_nsamp):
                 Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                 U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                P = (Q_rvs + 1j * U_rvs) / model
+                P = _form_linear(Q_rvs, U_rvs, subtract_mean_qu)
                 tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                 rm_phi_samples[bin, iter], _ = _measure_rm(
                     phi, np.abs(tmp_fdf), zp_hwhm
@@ -325,9 +300,7 @@ def rm_synthesis(
                     K = 1.0 / np.sum(W)
                     Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                     U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                    P, model = _normalise_spectrum(
-                        Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm
-                    )
+                    P = _form_linear(Q_rvs, U_rvs, subtract_mean_qu)
                     tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                     tmp_prof_fdf += np.abs(tmp_fdf)
                 tmp_prof_fdf /= len(onpulse_bins)
@@ -339,7 +312,8 @@ def rm_synthesis(
 
     if meas_rm_scat:
         logger.info("Computing RM_scat...")
-        S = cube.mean_subbands  # -> dim=(pol,freq)
+        # Only sum the onpulse bins
+        S = cube.subbands[:, :, onpulse_mask].mean(2)  # -> dim=(pol,freq)
         W = np.where(S[0] == 0.0, 0.0, 1.0)  # Uniform weights
         K = 1.0 / np.sum(W)
         if type(bootstrap_nsamp) is int:
@@ -347,13 +321,13 @@ def rm_synthesis(
             for iter in trange(bootstrap_nsamp):
                 Q_rvs = st.norm.rvs(S[1], q_std).astype(np.float64)
                 U_rvs = st.norm.rvs(S[2], u_std).astype(np.float64)
-                P, model = _normalise_spectrum(
-                    Q_rvs + 1j * U_rvs, S[0], cube.freqs, norm
-                )
+                P = _form_linear(Q_rvs, U_rvs, subtract_mean_qu)
                 tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
                 rm_scat_samples[iter], _ = _measure_rm(phi, np.abs(tmp_fdf), zp_hwhm)
         else:
-            P, model = _normalise_spectrum(S[1] + 1j * S[2], S[0], cube.freqs, norm)
+            P = _form_linear(S[1], S[2], subtract_mean_qu)
+            if plot_qu:
+                plot_qu_spectra(S[1], S[2], cube.freqs, savename="qu_spectra_phase_avg")
             tmp_fdf = dft_kernel(P * W, tmp_fdf, phi, l2, l2_0, K)
             rm_scat_samples, _ = _measure_rm(phi, np.abs(tmp_fdf), zp_hwhm)
     else:
