@@ -27,7 +27,15 @@ logger = logging.getLogger(__name__)
     show_default=True,
     help="The logger verbosity level.",
 )
-def main(archive: str, log_level: str) -> None:
+@click.option(
+    "-t",
+    "telescope",
+    type=click.Choice(["mwa", "chime"], case_sensitive=False),
+    default="mwa",
+    show_default=True,
+    help="The telescope used to collect the observation.",
+)
+def main(archive: str, log_level: str, telescope: str) -> None:
     psrutils.setup_logger("psrutils", log_level)
 
     # Initialise a dictionary to store the various results
@@ -53,7 +61,10 @@ def main(archive: str, log_level: str) -> None:
 
     try:
         rm_iono, rm_iono_err = psrutils.iono.get_rm_iono(
-            cube, bootstrap_nsamp=int(1e4), savename=f"{jname}_rm_iono"
+            cube,
+            bootstrap_nsamp=int(1e4),
+            location=telescope,
+            savename=f"{jname}_rm_iono",
         )
     except HTTPError as e:
         logger.error(e)
