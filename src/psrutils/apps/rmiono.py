@@ -68,6 +68,7 @@ def main(archive: str, log_level: str, telescope: str) -> None:
         )
     except HTTPError as e:
         logger.error(e)
+        exit(1)
 
     logger.info(f"RM_iono = {rm_iono:.3f}+/-{rm_iono_err:.3f} rad/m2")
     results["RM_iono"] = rm_iono
