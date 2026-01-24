@@ -74,6 +74,7 @@ def get_rm_iono(
         observation.
     """
     if location.upper() in TELESCOPE_LOCS.keys():
+        logger.info(f"Using location: '{location.upper()}'")
         telescope_loc = TELESCOPE_LOCS[location.upper()]
     else:
         raise ValueError(f"Invalid location specified: '{location}'")
