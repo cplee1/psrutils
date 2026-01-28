@@ -27,6 +27,15 @@ __all__ = ["get_rm_iono"]
 
 logger = logging.getLogger(__name__)
 
+TELESCOPE_LOCS = {
+    "MWA": EarthLocation(
+        lat=-26.703319 * u.deg, lon=116.67081 * u.deg, height=377.827 * u.m
+    ),
+    "CHIME": EarthLocation(
+        lat=49.3208 * u.deg, lon=-119.6236 * u.deg, height=545.0 * u.m
+    ),
+}
+
 
 # TODO: Format docstring
 def get_rm_iono(
@@ -34,6 +43,7 @@ def get_rm_iono(
     bootstrap_nsamp: int | None = None,
     prefix: str = "jpl",
     server: str = "cddis",
+    location: str = "mwa",
     savename: str | None = None,
 ) -> tuple[np.float_, np.float_]:
     """Get the mean ionospheric RM during an observation.
@@ -50,6 +60,8 @@ def get_rm_iono(
         The analysis centre prefix. Default: "jpl".
     server : `str`, optional
         Server to download from. Default: "cddis".
+    location : `str`, optional
+        Earth location of the observation ["mwa", "chime"]. Default: "mwa".
     savename : `str | None`, optional
         If provided, will save a plot with this name. Default: `None`.
 
@@ -61,16 +73,19 @@ def get_rm_iono(
         The standard deviation of the mean ionospheric RM during the
         observation.
     """
-    mwa_loc = EarthLocation(
-        lat=-26.703319 * u.deg, lon=116.67081 * u.deg, height=377.827 * u.m
-    )
+    if location.upper() in TELESCOPE_LOCS.keys():
+        logger.info(f"Using location: '{location.upper()}'")
+        telescope_loc = TELESCOPE_LOCS[location.upper()]
+    else:
+        raise ValueError(f"Invalid location specified: '{location}'")
+
     times = Time(cube.start_mjd, format="mjd") + np.linspace(0, cube.int_time, 10) * u.s
     query = QueryATNF(psrs=cube.source, params=["RAJD", "DECJD"])
     psr = query.get_pulsar(cube.source)
     source = SkyCoord(ra=psr["RAJD"][0] * u.deg, dec=psr["DECJD"][0] * u.deg)
 
     rm = get_rm.get_rm_from_skycoord(
-        loc=mwa_loc,
+        loc=telescope_loc,
         times=times,
         source=source,
         prefix=prefix,

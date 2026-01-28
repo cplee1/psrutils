@@ -28,6 +28,14 @@ logger = logging.getLogger(__name__)
     show_default=True,
     help="The logger verbosity level.",
 )
+@click.option(
+    "-t",
+    "telescope",
+    type=click.Choice(["mwa", "chime"], case_sensitive=False),
+    default="mwa",
+    show_default=True,
+    help="The telescope used to collect the observation.",
+)
 @click.option("-f", "fscr", type=int, help="Fscrunch to this number of channels.")
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
@@ -81,7 +89,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--subtract_mean_qu",
     is_flag=True,
-    help="Subtrace the mean from Q and U to remove the DC signal.",
+    help="Subtract the mean from Q and U to remove the achromatic signal.",
 )
 @click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
 @click.option("--get_rm_iono", is_flag=True, help="Get the ionospheric RM.")
@@ -111,6 +119,7 @@ logger = logging.getLogger(__name__)
 def main(
     archive: str,
     log_level: str,
+    telescope: str,
     fscr: int,
     bscr: int,
     rotate: float,
@@ -390,7 +399,10 @@ def main(
         psrutils.setup_logger("spinifex", log_level)
         try:
             rm_iono, rm_iono_err = psrutils.iono.get_rm_iono(
-                cube, bootstrap_nsamp=int(1e4), savename=f"{cube.source}_rm_iono"
+                cube,
+                bootstrap_nsamp=int(1e4),
+                location=telescope,
+                savename=f"{cube.source}_rm_iono",
             )
             results["RM_iono"] = rm_iono
             results["RM_iono_unc"] = rm_iono_err
