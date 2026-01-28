@@ -89,7 +89,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--subtract_mean_qu",
     is_flag=True,
-    help="Subtrace the mean from Q and U to remove the DC signal.",
+    help="Subtract the mean from Q and U to remove the achromatic signal.",
 )
 @click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
 @click.option("--get_rm_iono", is_flag=True, help="Get the ionospheric RM.")
