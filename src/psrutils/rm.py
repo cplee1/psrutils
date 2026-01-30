@@ -307,7 +307,9 @@ def rm_synthesis(
                 tmp_prof_fdf /= len(onpulse_bins)
                 rm_prof_samples[iter], _ = _measure_rm(phi, tmp_prof_fdf, zp_hwhm)
         else:
-            rm_prof_samples, _ = _measure_rm(phi, np.abs(fdf).mean(0), zp_hwhm)
+            rm_prof_samples, _ = _measure_rm(
+                phi, np.abs(fdf[onpulse_mask, :]).mean(0), zp_hwhm
+            )
     else:
         rm_prof_samples = None
 
