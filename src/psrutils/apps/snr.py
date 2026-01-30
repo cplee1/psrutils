@@ -58,7 +58,6 @@ def main(
     peak_flux = np.max(cube.profile)
     profile = psrutils.SplineProfile(cube.profile / peak_flux)
     profile.gridsearch_onpulse_regions()
-
     if plot_diagnostics:
         profile.plot_diagnostics(
             plot_overestimate=True,
@@ -69,23 +68,21 @@ def main(
             save_pdf=save_pdf,
         )
 
-    # W_eq = sum(profile) / max(profile)
-    # Because the profile is normalised, the peak flux is unity, and the
-    # integrated flux becomes the equivalent width
-    w_eq = np.sum(profile.profile[profile.overest_onpulse_bins])
+    sigma_p_off = np.std(profile.profile[profile.offpulse_bins])
+    sigma_p_res = np.std(profile.residuals)
+    logger.debug(f"Offpulse noise = {sigma_p_off}")
+    logger.debug(f"Residual noise = {sigma_p_res}")
+
+    # The equivalent width of a top-hat with the same area and peak amplitude
+    # as the pulse profile
+    w_eq = np.sum(profile.profile) / np.max(profile.profile)
+    logger.info(f"W_eq = {w_eq:.3f} bins or {w_eq / profile.nbin:.3f} rotations")
 
     # Eq 7.1 on pg 167 of Lorimer and Kramer (2012)
+    # For pure Gaussian noise, the S/N is invariant under up/down-sampling
     profile_corr = profile.profile - profile.baseline_est
-    snr = np.sum(profile_corr[profile.overest_onpulse_bins]) / (
-        profile.noise_est * np.sqrt(w_eq)
-    )
-
-    # The S/N of the peak bin in the profile
-    snr_peak = np.max(profile.profile) / profile.noise_est
-
-    # The phase-averaged S/N
-    snr_mean = np.mean(profile.profile) / profile.noise_est
-
-    logger.info(f"Peak S/N = {snr_peak:.3f}")
-    logger.info(f"Phase-averaged S/N = {snr_mean:.3f}")
-    logger.info(f"Profile S/N (Eq 7.1 Handbook) = {snr:.3f}")
+    snr_off = np.sum(profile_corr) / (sigma_p_off * np.sqrt(w_eq))
+    snr_res = np.sum(profile_corr) / (sigma_p_res * np.sqrt(w_eq))
+    logger.debug(f"sum(profile)/sqrt(W_eq) = {np.sum(profile_corr) / np.sqrt(w_eq)}")
+    logger.info(f"S/N = {snr_off:.3f} (using offpulse noise)")
+    logger.info(f"S/N = {snr_res:.3f} (using residual noise)")
