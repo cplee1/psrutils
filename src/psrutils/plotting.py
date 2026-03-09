@@ -491,10 +491,14 @@ def plot_pol_profile(
         text_shift = 0.01
     else:
         text_shift = 0.0
+    try:
+        source_label = jname_to_name(cube.source).replace("-", "$-$")
+    except KeyError:
+        source_label = cube.source
     ax_prof.text(
         0.025 + text_shift,
         0.95,
-        f"{jname_to_name(cube.source).replace('-', '$-$')}",
+        source_label,
         horizontalalignment="left",
         verticalalignment="top",
         transform=ax_prof.transAxes,
@@ -820,10 +824,14 @@ def plot_2d_fdf(
         bin_func=bin_func,
         lw=lw,
     )
+    try:
+        source_label = jname_to_name(cube.source).replace("-", "$-$")
+    except KeyError:
+        source_label = cube.source
     ax_prof.text(
         0.03,
         0.91,
-        f"{jname_to_name(cube.source).replace('-', '$-$')}",
+        source_label,
         horizontalalignment="left",
         verticalalignment="top",
         transform=ax_prof.transAxes,
