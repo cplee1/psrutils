@@ -40,9 +40,26 @@ logger = logging.getLogger(__name__)
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
 @click.option("-c", "centre", is_flag=True, help="Centre the pulse.")
-@click.option("--rmlim", type=float, default=100.0, show_default=True, help="RM limit.")
 @click.option(
-    "--rmres", type=float, default=0.1, show_default=True, help="RM resolution."
+    "--rmmin",
+    type=float,
+    default=-100.0,
+    show_default=True,
+    help="Minimum RM to search.",
+)
+@click.option(
+    "--rmmax",
+    type=float,
+    default=100.0,
+    show_default=True,
+    help="Maximum RM to search.",
+)
+@click.option(
+    "--rmres",
+    type=float,
+    default=0.1,
+    show_default=True,
+    help="RM resolution of the search.",
 )
 @click.option(
     "-n",
@@ -124,7 +141,8 @@ def main(
     bscr: int,
     rotate: float,
     centre: bool,
-    rmlim: float,
+    rmmin: float,
+    rmmax: float,
     rmres: float,
     nsamp: int,
     p0_cutoff: float,
@@ -154,6 +172,11 @@ def main(
     dark_mode: bool,
 ) -> None:
     psrutils.setup_logger("psrutils", log_level)
+
+    # Input checks
+    if rmmin > rmmax:
+        logger.error(f"RMmin (={rmmin}) > RMmax (={rmmax})")
+        exit(1)
 
     # Initialise a dictionary to store the various results
     results: dict[str, Any] = {}
@@ -209,9 +232,10 @@ def main(
         )
 
     logger.info("Running RM-Synthesis...")
-    results["RM_search_limit"] = rmlim
+    results["RM_search_min"] = rmmin
+    results["RM_search_max"] = rmmax
     results["RM_search_resolution"] = rmres
-    phi = np.arange(-1.0 * rmlim, rmlim + rmres, rmres)
+    phi = np.arange(rmmin, rmmax + rmres, rmres)
     try:
         if len(profile.overest_onpulse_bins) == 0:
             onpulse_bins = None
