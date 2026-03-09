@@ -75,14 +75,13 @@ def main(
 
     # The equivalent width of a top-hat with the same area and peak amplitude
     # as the pulse profile
-    w_eq = np.sum(profile.profile) / np.max(profile.profile)
+    w_eq = np.sum(profile.profile) / np.max(profile.bspl(profile.bins))
     logger.info(f"W_eq = {w_eq:.3f} bins or {w_eq / profile.nbin:.3f} rotations")
 
     # Eq 7.1 on pg 167 of Lorimer and Kramer (2012)
     # For pure Gaussian noise, the S/N is invariant under up/down-sampling
-    profile_corr = profile.profile - profile.baseline_est
-    snr_off = np.sum(profile_corr) / (sigma_p_off * np.sqrt(w_eq))
-    snr_res = np.sum(profile_corr) / (sigma_p_res * np.sqrt(w_eq))
-    logger.debug(f"sum(profile)/sqrt(W_eq) = {np.sum(profile_corr) / np.sqrt(w_eq)}")
+    snr_off = np.sum(profile.profile) / (sigma_p_off * np.sqrt(w_eq))
+    snr_res = np.sum(profile.profile) / (sigma_p_res * np.sqrt(w_eq))
+    logger.debug(f"sum(profile)/sqrt(W_eq) = {np.sum(profile.profile) / np.sqrt(w_eq)}")
     logger.info(f"S/N = {snr_off:.3f} (using offpulse noise)")
     logger.info(f"S/N = {snr_res:.3f} (using residual noise)")
