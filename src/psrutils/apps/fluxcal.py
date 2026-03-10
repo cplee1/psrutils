@@ -125,9 +125,6 @@ logger = logging.getLogger(__name__)
     show_default=True,
     help="The fraction of the integration time flagged.",
 )
-@click.option(
-    "-f", "--file_prefix", type=str, help="The prefix of the output file names."
-)
 @click.option("--plot_trec", is_flag=True, help="Plot the receiver temperature.")
 @click.option("--plot_pb", is_flag=True, help="Plot the primary beam in Alt/Az.")
 @click.option("--plot_tab", is_flag=True, help="Plot the tied-array beam in Alt/Az.")
@@ -143,6 +140,7 @@ logger = logging.getLogger(__name__)
     is_flag=True,
     help="Plot diagnostics for the profile modelling used to get the offpulse noise.",
 )
+@click.option("-o", "--outfile", type=str, help="The prefix of the output file names.")
 def main(
     log_level: str,
     metafits: str,
@@ -158,7 +156,6 @@ def main(
     eta: float,
     bw_flagged: float,
     time_flagged: float,
-    file_prefix: str,
     plot_trec: bool,
     plot_pb: bool,
     plot_tab: bool,
@@ -166,6 +163,7 @@ def main(
     plot_integrals: bool,
     plot_3d: bool,
     plot_profile_diagnostics: bool,
+    outfile: str,
 ) -> None:
     setup_logger("psrutils", log_level)
     setup_logger("mwa_vcs_fluxcal", log_level)
@@ -173,8 +171,10 @@ def main(
     logger.info(f"Loading archive: {archive}")
     cube = StokesCube.from_psrchive(archive, tscrunch=1, fscrunch=1, bscrunch=bscrunch)
     logger.info(f"Number of bins: {cube.num_bin}")
-    if file_prefix is None:
-        file_prefix = cube.source
+    srcname_raw = cube.source
+    srcname_ltx = cube.source.replace("-", "$-$")
+    if outfile is None:
+        outfile = srcname_raw
 
     # Get the profile as a SplineProfile object to use for analysis
     profile = cube.spline_profile
@@ -182,12 +182,11 @@ def main(
     # Find the onpulse using the spline method
     profile.gridsearch_onpulse_regions()
     if plot_profile_diagnostics:
-        savename = f"{cube.source}_profile_diagnostics"
         profile.plot_diagnostics(
             plot_underestimate=False,
             plot_overestimate=True,
-            sourcename=cube.source,
-            savename=savename,
+            sourcename=srcname_ltx,
+            savename=f"{outfile}_profile_diagnostics",
         )
 
     # Get the mean and standard deviation of the noise
@@ -245,7 +244,7 @@ def main(
         plot_tsky,
         plot_integrals,
         plot_3d,
-        file_prefix,
+        outfile,
     )
 
     # Radiometer equation
@@ -306,14 +305,14 @@ def main(
 
     # Add to beginning of the dictionary
     pre_dict = dict(
-        Source=cube.source,
+        Source=srcname_raw,
         Nbin=cube.num_bin,
         Time_frac_flagged=time_flagged,
         BW_frac_flagged=bw_flagged,
     )
     results = dict(pre_dict, **results)
 
-    qty_dict_to_toml(results, f"{file_prefix}_fluxcal_results.toml")
+    qty_dict_to_toml(results, f"{outfile}_fluxcal_results.toml")
 
 
 if __name__ == "__main__":

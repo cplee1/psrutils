@@ -11,7 +11,12 @@ import numpy as np
 import rtoml
 from requests.exceptions import HTTPError
 
-import psrutils
+from psrutils import __version__, plotting
+from psrutils.cube import StokesCube
+from psrutils.logger import log_levels, setup_logger
+from psrutils.misc import pythonise
+from psrutils.profile import SplineProfile
+from psrutils.rm import get_delta_vi, rm_clean, rm_synthesis
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +24,12 @@ logger = logging.getLogger(__name__)
 @click.command()
 @click.argument("archive", nargs=1, type=click.Path(exists=True))
 @click.help_option("-h", "--help")
-@click.version_option(psrutils.__version__, "-V", "--version")
+@click.version_option(__version__, "-V", "--version")
 @click.option(
     "-L",
     "log_level",
-    type=click.Choice(psrutils.log_levels.keys(), case_sensitive=False),
-    default="info",
+    type=click.Choice(log_levels.keys(), case_sensitive=False),
+    default="INFO",
     show_default=True,
     help="The logger verbosity level.",
 )
@@ -108,7 +113,6 @@ logger = logging.getLogger(__name__)
     is_flag=True,
     help="Subtract the mean from Q and U to remove the achromatic signal.",
 )
-@click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
 @click.option("--get_rm_iono", is_flag=True, help="Get the ionospheric RM.")
 @click.option("--no_clean", is_flag=True, help="Do not run RM-CLEAN on the FDF.")
 @click.option("--boxplot", is_flag=True, help="Plot RM_phi as boxplots.")
@@ -133,6 +137,7 @@ logger = logging.getLogger(__name__)
     "--save_phase_resolved", is_flag=True, help="Save phase-resolved measurements."
 )
 @click.option("-d", "dark_mode", is_flag=True, help="Use a dark background.")
+@click.option("-o", "--outfile", type=str, help="The prefix of the output file names.")
 def main(
     archive: str,
     log_level: str,
@@ -155,7 +160,6 @@ def main(
     mask_zero_peak_hwhm: bool,
     mask_zero_peak_fwhm: bool,
     subtract_mean_qu: bool,
-    meas_widths: bool,
     get_rm_iono: bool,
     no_clean: bool,
     boxplot: bool,
@@ -170,8 +174,9 @@ def main(
     save_pdf: bool,
     save_phase_resolved: bool,
     dark_mode: bool,
+    outfile: str,
 ) -> None:
-    psrutils.setup_logger("psrutils", log_level)
+    setup_logger("psrutils", log_level)
 
     # Input checks
     if rmmin > rmmax:
@@ -182,10 +187,14 @@ def main(
     results: dict[str, Any] = {}
 
     logger.info(f"Loading archive: {archive}")
-    cube = psrutils.StokesCube.from_psrchive(archive, False, 1, fscr, bscr, rotate)
+    cube = StokesCube.from_psrchive(archive, False, 1, fscr, bscr, rotate)
     logger.info(f"Number of bins: {cube.num_bin}")
+    srcname_raw = cube.source
+    srcname_ltx = cube.source.replace("-", "$-$")
+    if outfile is None:
+        outfile = srcname_raw
 
-    results["Source"] = cube.source
+    results["Source"] = srcname_raw
     results["Nbin"] = cube.num_bin
 
     if centre:
@@ -199,36 +208,21 @@ def main(
     # sensible, but this needs to be accounted for when accessing the
     # measured values later (e.g. noise_est)
     peak_flux = np.max(cube.profile)
-    profile = psrutils.SplineProfile(cube.profile / peak_flux)
+    profile = SplineProfile(cube.profile / peak_flux)
     profile.gridsearch_onpulse_regions()
-
-    if meas_widths:
-        peak_fracs = [0.5, 0.1]
-        profile.measure_pulse_widths(peak_fracs=peak_fracs)
-        if hasattr(profile, "_widths"):
-            for peak_frac in peak_fracs:
-                w_param = f"W{peak_frac * 100:.0f}"
-                if w_param in profile._widths.keys():
-                    results[w_param] = [
-                        width for _, width in profile._widths[w_param][2]
-                    ]
-                    results[w_param + "_roots"] = [
-                        root_pair for root_pair, _ in profile._widths[w_param][2]
-                    ]
-
     if plot_diagnostics:
         profile.plot_diagnostics(
             plot_overestimate=True,
             plot_underestimate=False,
-            plot_width=meas_widths,
-            sourcename=cube.source,
-            savename=f"{cube.source}_profile_diagnostics",
+            plot_width=False,
+            sourcename=srcname_ltx,
+            savename=f"{outfile}_profile_diagnostics",
             save_pdf=save_pdf,
         )
 
     if plot_publn_prof:
         profile.plot_pubfig(
-            title=cube.source, savename=f"{cube.source}_pubfig", save_pdf=save_pdf
+            title=srcname_ltx, savename=f"{outfile}_pubfig", save_pdf=save_pdf
         )
 
     logger.info("Running RM-Synthesis...")
@@ -255,7 +249,7 @@ def main(
         mask_zero_peak = "hwhm"
     else:
         mask_zero_peak = None
-    rmsyn_result = psrutils.rm_synthesis(
+    rmsyn_result = rm_synthesis(
         cube,
         phi,
         meas_rm_prof=meas_rm_prof,
@@ -295,9 +289,9 @@ def main(
             results["RM_phi_unc"] = rm_phi_unc
 
         if boxplot:
-            psrutils.plotting.plot_rm_vs_phi(
+            plotting.plot_rm_vs_phi(
                 rm_phi_samples,
-                savename=f"{cube.source}_rm_phi_boxplot",
+                savename=f"{outfile}_rm_phi_boxplot",
                 save_pdf=save_pdf,
             )
 
@@ -320,12 +314,12 @@ def main(
                 results["RM_prof"] = rm_prof_meas
                 results["RM_prof_unc"] = rm_prof_unc
 
-            psrutils.plotting.plot_rm_hist(
+            plotting.plot_rm_hist(
                 rm_prof_samples,
                 valid_samples=plot_valid_samples,
                 range=discard,
-                title=cube.source.replace("-", "$-$"),
-                savename=f"{cube.source}_rm_prof_hist",
+                title=srcname_ltx,
+                savename=f"{outfile}_rm_prof_hist",
                 save_pdf=save_pdf,
             )
         else:
@@ -337,10 +331,10 @@ def main(
             results["RM_scat"] = rm_scat_meas
             results["RM_scat_unc"] = rm_scat_unc
 
-            psrutils.plotting.plot_rm_hist(
+            plotting.plot_rm_hist(
                 rm_scat_samples,
-                title=cube.source,
-                savename=f"{cube.source}_rm_scat_hist",
+                title=srcname_ltx,
+                savename=f"{outfile}_rm_scat_hist",
                 save_pdf=save_pdf,
             )
     else:
@@ -361,7 +355,7 @@ def main(
         cln_fdf = fdf
     else:
         logger.info("Running RM-CLEAN...")
-        rmcln_result = psrutils.rm_clean(
+        rmcln_result = rm_clean(
             phi, fdf, rmsf, rm_stats["rmsf_fwhm"], gain=0.5, cutoff=clean_cutoff
         )
         cln_fdf = rmcln_result[0]
@@ -370,7 +364,7 @@ def main(
 
     meas_delta_vi = True
     if meas_delta_vi:
-        delta_vi = psrutils.get_delta_vi(cube, onpulse_bins=onpulse_bins)
+        delta_vi = get_delta_vi(cube, onpulse_bins=onpulse_bins)
         if save_phase_resolved:
             results["delta_V_I"] = delta_vi
 
@@ -382,7 +376,7 @@ def main(
     except AttributeError:
         onpp = None
 
-    psrutils.plotting.plot_2d_fdf(
+    plotting.plot_2d_fdf(
         cube,
         np.abs(cln_fdf),
         phi,
@@ -398,14 +392,14 @@ def main(
         phase_range=phase_plotlim,
         phi_range=phi_plotlim,
         p0_cutoff=p0_cutoff,
-        bin_func=psrutils.centre_offset_degrees,
-        savename=f"{cube.source}_fdf",
+        bin_func=plotting.centre_offset_degrees,
+        savename=f"{outfile}_fdf",
         save_pdf=save_pdf,
         dark_mode=dark_mode,
     )
 
     if plot_pol_prof:
-        psrutils.plotting.plot_pol_profile(
+        plotting.plot_pol_profile(
             cube,
             rmsf_fwhm=rm_stats["rmsf_fwhm"],
             rm_phi_qty=rm_phi_qty,
@@ -414,19 +408,19 @@ def main(
             delta_vi=delta_vi,
             phase_range=phase_plotlim,
             p0_cutoff=p0_cutoff,
-            savename=f"{cube.source}_pol_profile",
+            savename=f"{outfile}_pol_profile",
             save_pdf=save_pdf,
             save_data=True,
         )
 
     if get_rm_iono:
-        psrutils.setup_logger("spinifex", log_level)
+        setup_logger("spinifex", log_level)
         try:
-            rm_iono, rm_iono_err = psrutils.iono.get_rm_iono(
+            rm_iono, rm_iono_err = get_rm_iono(
                 cube,
                 bootstrap_nsamp=int(1e4),
                 location=telescope,
-                savename=f"{cube.source}_rm_iono",
+                savename=f"{outfile}_rm_iono",
             )
             results["RM_iono"] = rm_iono
             results["RM_iono_unc"] = rm_iono_err
@@ -443,6 +437,6 @@ def main(
         except HTTPError as e:
             logger.error(e)
 
-    logger.info(f"Saving results: {cube.source}_rmsynth_results.toml")
-    with open(f"{cube.source}_rmsynth_results.toml", "w") as f:
-        rtoml.dump(psrutils.pythonise(results), f)
+    logger.info(f"Saving results: {outfile}_rmsynth_results.toml")
+    with open(f"{outfile}_rmsynth_results.toml", "w") as f:
+        rtoml.dump(pythonise(results), f)

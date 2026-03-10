@@ -7,17 +7,19 @@ from typing import Tuple
 import click
 import numpy as np
 
-import psrutils
+from psrutils import __version__, plotting
+from psrutils.cube import StokesCube
+from psrutils.logger import log_levels, setup_logger
 
 
 @click.command()
 @click.argument("archive", nargs=1, type=click.Path(exists=True))
 @click.help_option("-h", "--help")
-@click.version_option(psrutils.__version__, "-V", "--version")
+@click.version_option(__version__, "-V", "--version")
 @click.option(
     "-L",
     "log_level",
-    type=click.Choice(["DEBUG", "INFO", "ERROR"], case_sensitive=False),
+    type=click.Choice(log_levels.keys(), case_sensitive=False),
     default="INFO",
     help="The logger verbosity level.",
 )
@@ -65,9 +67,9 @@ def main(
     rotate: float,
     phase_plotlim: Tuple[float, float],
 ) -> None:
-    psrutils.setup_logger("psrutils", log_level)
+    setup_logger("psrutils", log_level)
 
-    cube = psrutils.StokesCube.from_psrchive(
+    cube = StokesCube.from_psrchive(
         archive,
         clone=False,
         tscrunch=tscr,
@@ -81,18 +83,18 @@ def main(
         cube.rotate_phase(rot_phase)
 
     if longitude:
-        bin_func = psrutils.plotting.centre_offset_degrees
+        bin_func = plotting.centre_offset_degrees
     else:
         bin_func = None
 
     if plot_tvsp:
-        psrutils.plotting.plot_time_phase(cube)
+        plotting.plot_time_phase(cube)
     if plot_fvsp:
-        psrutils.plotting.plot_freq_phase(cube)
+        plotting.plot_freq_phase(cube)
     if plot_prof:
-        psrutils.plotting.plot_profile(cube, normalise=normalise)
+        plotting.plot_profile(cube, normalise=normalise)
     if plot_pol_prof:
-        psrutils.plotting.plot_pol_profile(
+        plotting.plot_pol_profile(
             cube,
             normalise=normalise,
             bin_func=bin_func,

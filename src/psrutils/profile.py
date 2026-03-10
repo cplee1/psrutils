@@ -7,13 +7,13 @@ import itertools
 import logging
 from typing import Iterable
 
+import matplotlib as mpl
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.stats import histogram
 from numpy.typing import ArrayLike, NDArray
 from scipy.interpolate import BSpline, PPoly, splrep
-from scipy.stats import shapiro
 from statsmodels.sandbox.stats.runs import runstest_1samp
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
@@ -66,6 +66,11 @@ class SplineProfile(object):
     def phases(self) -> NDArray[np.float_]:
         """An array of bin phases."""
         return self._bins / (self._nbin - 1)
+
+    @property
+    def w_eq(self) -> float:
+        """The equivalent pulse width in bins."""
+        return np.sum(self._prof) / np.max(self._prof)
 
     @property
     def bspl(self) -> BSpline:
@@ -516,8 +521,8 @@ class SplineProfile(object):
     #     self._noise_est = old_noise_est
 
     def measure_pulse_widths(self, peak_fracs: list | None = None) -> None:
-        """Measure the pulse width(s) at a given fraction of the peak flux
-        density.
+        """Measure the pulse width(s) in bins at a given fraction of the peak
+        flux density.
 
         Parameters
         ----------
@@ -608,6 +613,7 @@ class SplineProfile(object):
         plot_underestimate: bool = True,
         plot_overestimate: bool = True,
         plot_width: bool = False,
+        lw: float = 0.9,
         sourcename: str | None = None,
         savename: str = "profile_diagnostics",
         save_pdf: bool = False,
@@ -621,6 +627,10 @@ class SplineProfile(object):
             Show the onpulse underestimate(s). Default: `True`.
         plot_overestimate : `bool`, optional
             Show the onpulse overestimate(s). Default: `True`.
+        plot_width : `bool`, optional
+            Show the width estimate(s). Default: `True`.
+        lw : `float`, optional
+            The linewidth to use in all subplots. Default: 0.9.
         sourcename : `str`, optional
             The name of the source to add to the plot.
         savename : `str`, optional
@@ -630,35 +640,26 @@ class SplineProfile(object):
             Save the plot as a pdf?
         """
         # Create figure and axes
-        fig = plt.figure(layout="constrained", figsize=(10, 7))
+        fig = plt.figure(layout="tight", figsize=(6, 8))
+        gs = fig.add_gridspec(2, 2, width_ratios=[1, 1], height_ratios=[9, 3])
 
-        gs = gridspec.GridSpec(
-            4, 2, width_ratios=[2, 1], height_ratios=[1, 3, 3, 3], figure=fig
-        )
+        gs_prof = gs[0, :].subgridspec(3, 1, wspace=0)
+        axs_prof = gs_prof.subplots()
+        ax_white = fig.add_subplot(gs[1, 0])
+        ax_hists = fig.add_subplot(gs[1, 1])
 
-        ax_text = fig.add_subplot(gs[0, :])
-        axLT = fig.add_subplot(gs[1, 0])
-        axLM = fig.add_subplot(gs[2, 0])
-        axLB = fig.add_subplot(gs[3, 0])
-        axRT = fig.add_subplot(gs[1, 1])
-        axRM = fig.add_subplot(gs[2, 1])
-        axRB = fig.add_subplot(gs[3, 1])
-
-        left_axes = [axLT, axLM, axLB]
-        right_axes = [axRT, axRM, axRB]
-        all_axes = left_axes + right_axes
-
-        xrange = (self._bins[0], self._bins[-1])
-        lw = 0.9
+        xrange = (0, 1)
+        xvalues = self.phases
+        bins_to_x = 1 / self.nbin
 
         # Profile
-        axLT.plot(self._bins, self._prof, color="k", linewidth=lw, alpha=0.2)
-        axLT.plot(self._bins, self._bspl(self._bins), color="k", linewidth=lw)
-        yrangeLT = axLT.get_ylim()
-
+        axs_prof[0].set_ylabel("Profile")
+        axs_prof[0].plot(xvalues, self._prof, color="k", linewidth=lw, alpha=0.2)
+        axs_prof[0].plot(xvalues, self._bspl(self._bins), color="k", linewidth=lw)
+        yrangeProf0 = axs_prof[0].get_ylim()
         xpos = (xrange[1] - xrange[0]) * 0.92 + xrange[0]
-        ypos = (yrangeLT[-1] - yrangeLT[0]) * 0.8 + yrangeLT[0]
-        axLT.errorbar(
+        ypos = (yrangeProf0[-1] - yrangeProf0[0]) * 0.8 + yrangeProf0[0]
+        axs_prof[0].errorbar(
             xpos,
             ypos,
             yerr=np.std(self.residuals),
@@ -669,23 +670,31 @@ class SplineProfile(object):
         )
 
         # Residuals
-        axLM.plot(
-            self._bins, self._prof - self._bspl(self._bins), color="k", linewidth=lw
-        )
-        yrangeLM = axLM.get_ylim()
+        axs_prof[1].set_ylabel("Residuals")
+        axs_prof[1].plot(xvalues, self.residuals, color="k", linewidth=lw)
+        yrangeProf1 = axs_prof[1].get_ylim()
 
-        # Derivatives
-        axLB.plot(
-            self._bins, self._d1_bspl(self._bins), color="k", linewidth=lw, label="1st"
+        # Cumulative profiles
+        axs_prof[2].set_ylabel("Cumulative Sum")
+        axs_prof[2].plot(
+            xvalues, np.cumsum(self._prof), color="k", linewidth=lw, label="Profile"
         )
-        axLB.plot(
-            self._bins,
-            self._d2_bspl(self._bins),
+        axs_prof[2].plot(
+            xvalues,
+            np.cumsum(self._bspl(self._bins)),
+            color="tab:green",
+            linewidth=lw,
+            label="Spline",
+        )
+        axs_prof[2].plot(
+            xvalues,
+            np.cumsum(self.residuals),
             color="tab:red",
             linewidth=lw,
-            label="2nd",
+            label="Residuals",
         )
-        yrangeLB = axLB.get_ylim()
+        yrangeProf2 = axs_prof[2].get_ylim()
+        axs_prof[2].legend(loc="upper left", fontsize=7, frameon=False)
 
         # Onpulse estimates
         if (
@@ -704,21 +713,23 @@ class SplineProfile(object):
                     continue
 
                 for op_pair in pairlist:
+                    oplp = op_pair[0] * bins_to_x
+                    oprp = op_pair[1] * bins_to_x
                     for ax, yrange in zip(
-                        left_axes, [yrangeLT, yrangeLM, yrangeLB], strict=True
+                        axs_prof, [yrangeProf0, yrangeProf1, yrangeProf2], strict=True
                     ):
                         if op_pair[0] < op_pair[-1]:
-                            ax.fill_betweenx(yrange, op_pair[0], op_pair[-1], **args)
+                            ax.fill_betweenx(yrange, oplp, oprp, **args)
                         else:
-                            ax.fill_betweenx(yrange, op_pair[0], xrange[-1], **args)
-                            ax.fill_betweenx(yrange, xrange[0], op_pair[-1], **args)
+                            ax.fill_betweenx(yrange, oplp, xrange[-1], **args)
+                            ax.fill_betweenx(yrange, xrange[0], oprp, **args)
                         ax.set_ylim(yrange)
 
         # Pulse widths
         w_info_lines = []
         if hasattr(self, "_widths") and self._widths is not None:
             w_kwargs = dict(
-                color="tab:red",
+                color="k",
                 marker=".",
                 markersize=5,
                 linestyle=":",
@@ -733,145 +744,80 @@ class SplineProfile(object):
                         w_info_line.append(", ")
                     w_info_line.append(f"{width:.1f} ({width / self._nbin * 100:.1f}%)")
                     if plot_width:
+                        wlp = wl * bins_to_x
+                        wrp = wr * bins_to_x
                         if wl < wr:
-                            axLT.errorbar(
-                                x=[wl, wr], y=[peak_frac_flux] * 2, **w_kwargs
+                            axs_prof[0].errorbar(
+                                x=[wlp, wrp], y=[peak_frac_flux] * 2, **w_kwargs
                             )
                         else:
-                            axLT.errorbar(
-                                x=[xrange[0], wr], y=[peak_frac_flux] * 2, **w_kwargs
+                            axs_prof[0].errorbar(
+                                x=[xrange[0], wrp], y=[peak_frac_flux] * 2, **w_kwargs
                             )
-                            axLT.errorbar(
-                                x=[wl, xrange[1]], y=[peak_frac_flux] * 2, **w_kwargs
+                            axs_prof[0].errorbar(
+                                x=[wlp, xrange[1]], y=[peak_frac_flux] * 2, **w_kwargs
                             )
                 w_info_lines.append("".join(w_info_line))
 
         # Histograms
+        ax_hists.set_ylabel("Number of samples")
+        ax_hists.set_xlabel("Sample value")
         hist_kwargs = dict(bins="knuth", density=False)
-        stairs_kwargs = dict(lw=lw, fill=True)
-        vline_kwargs = dict(linestyle="--", linewidth=1.4, color="tab:red")
+        stairs_kwargs = dict(lw=lw, fill=False)
+        vline_kwargs = dict(linestyle=":", linewidth=lw)
 
-        # Residuals
-        res = self.residuals
-        p = shapiro(res)[1]
-        mu = np.mean(res)
-        std = np.std(res)
-        hb = histogram(res, **hist_kwargs)
-        axRM.stairs(*hb, color="tab:blue", **stairs_kwargs)
-        axRM.axvline(mu, **vline_kwargs)
-        axRM.text(
-            0.05,
-            0.93,
-            f"$p_\\mathrm{{SW}}=${p:.3f}\n$\\mu=${mu:.2E}\n$\\sigma=${std:.2E}",
-            verticalalignment="top",
-            horizontalalignment="left",
-            transform=axRM.transAxes,
-            fontsize=9,
-        )
-
-        # Offpulse samples
+        # Offpulse samples histogram
         noff = 0
         if hasattr(self, "_offpulse_pairs") and self._offpulse_pairs is not None:
             mask = get_profile_mask_from_pairs(self._nbin, self._offpulse_pairs)
             if not np.all(np.logical_not(mask)):
                 noff = len(self._prof[mask])
                 if noff > 3:
-                    p = shapiro(self._prof[mask])[1]
                     mu = np.mean(self._prof[mask])
-                    std = np.std(self._prof[mask])
                     hb = histogram(self._prof[mask], **hist_kwargs)
-                    axRT.stairs(*hb, color="tab:blue", **stairs_kwargs)
-                    axRT.axvline(mu, **vline_kwargs)
-                    axRT.text(
-                        0.05,
-                        0.93,
-                        f"$p_\\mathrm{{SW}}=${p:.3f}\n$\\mu=${mu:.2E}\n$\\sigma=${std:.2E}",
-                        verticalalignment="top",
-                        horizontalalignment="left",
-                        transform=axRT.transAxes,
-                        fontsize=9,
-                    )
+                    ax_hists.stairs(*hb, color="k", label="Offpulse", **stairs_kwargs)
+                    ax_hists.axvline(mu, color="k", **vline_kwargs)
 
-                    # Make sure the histograms have the same x-limits
-                    xlims_rm = axRM.get_xlim()
-                    xlims_rt = axRT.get_xlim()
-                    xlims_hist = [
-                        min(xlims_rt[0], xlims_rm[0]),
-                        max(xlims_rt[1], xlims_rm[1]),
-                    ]
-                    axRT.set_xlim(xlims_hist)
-                    axRM.set_xlim(xlims_hist)
+        # Residuals histogram
+        mu = np.mean(self.residuals)
+        hb = histogram(self.residuals, **hist_kwargs)
+        ax_hists.stairs(*hb, color="tab:red", label="Residuals", **stairs_kwargs)
+        ax_hists.axvline(mu, color="tab:red", **vline_kwargs)
+        ax_hists.legend(loc="upper left", fontsize=7, frameon=False)
 
         # p-values
         if hasattr(self, "_p_values") and self._p_values is not None:
-            axRB.set_title("Whiteness Score", fontsize=12)
-            axRB.plot(self._noise_est_trials, self._p_values, linewidth=lw, color="k")
-            axRB.set_xlim([self._noise_est_trials[0], self._noise_est_trials[-1]])
-            axRB.set_ylim([-100, 0])
-            axRB.set_xscale("log")
-            axRB.set_xlabel("Std. of Noise ($\sigma$)")
+            ax_white.set_ylabel("Whiteness Score", fontsize=12)
+            ax_white.plot(
+                self._noise_est_trials, self._p_values, linewidth=lw, color="k"
+            )
+            ax_white.set_xlim([self._noise_est_trials[0], self._noise_est_trials[-1]])
+            ax_white.set_ylim([-100, 0])
+            ax_white.set_xscale("log")
+            ax_white.set_xlabel("Std. of Noise ($\sigma$)")
         else:
-            axRB.set_visible(False)
+            ax_white.set_visible(False)
 
-        # Info
-        if self._noise_est is not None:
-            snr = f"{np.max(self._prof) / self._noise_est:.1f}"
-        else:
-            snr = "unknown"
-
-        ax_text.set_xticks([])
-        ax_text.set_yticks([])
-        ax_text.spines[["left", "right", "top", "bottom"]].set_visible(False)
-        if sourcename is None:
-            sourcename = "Unknown Source"
-        fit_info_lines = [
-            sourcename,
-            f"S/N={snr}",
-            f"Nbin={self._nbin}",
-            f"Nbin(on)={self._nbin - noff} "
-            + f"({(self._nbin - noff) / self._nbin * 100:.1f}%)",
-            f"Nbin(off)={noff} ({noff / self._nbin * 100:.1f}%)",
-        ]
-        ax_text.text(
-            0.0,
-            0.9,
-            "    ".join(fit_info_lines),
-            verticalalignment="top",
-            horizontalalignment="left",
-            transform=ax_text.transAxes,
-            fontsize=12,
+        # Final touches
+        axs_prof[0].set_title(
+            sourcename + "   " + f"$N_\\mathrm{{b}}={self._nbin}$", pad=12
         )
-        ax_text.text(
-            0.0,
-            0.4,
-            "    ".join(w_info_lines),
-            verticalalignment="top",
-            horizontalalignment="left",
-            transform=ax_text.transAxes,
-            fontsize=12,
-        )
+        axs_prof[2].set_xlabel("Pulse Phase")
 
-        # Finishing touches
-        axLB.legend(fontsize=9)
-
-        axLT.set_title("Profile", fontsize=12)
-        axLM.set_title("Residuals", fontsize=12)
-        axLB.set_title("Profile Derivatives", fontsize=12)
-        axRT.set_title("Offpulse Sample Distribution", fontsize=12)
-        axRM.set_title("Residual Distribution", fontsize=12)
-
-        for ax in left_axes:
-            ax.axhline(0, linestyle=":", color="k", linewidth=lw, alpha=0.3, zorder=1)
-            ax.set_xlim(xrange)
-
-        for ax in all_axes:
+        for ax in list(axs_prof) + [ax_white, ax_hists]:
             ax.tick_params(which="both", right=True, top=True)
             ax.minorticks_on()
             ax.tick_params(axis="both", which="both", direction="in")
             ax.tick_params(axis="both", which="major", length=4)
             ax.tick_params(axis="both", which="minor", length=2)
 
-        axLB.set_xlabel("Bin Index")
+        for ax in axs_prof:
+            ax.axhline(0, linestyle=":", color="k", linewidth=lw, alpha=0.3, zorder=1)
+            ax.set_xlim(xrange)
+            ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.1))
+            ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(0.01))
+
+        fig.align_ylabels()
 
         logger.info(f"Saving plot file: {savename}.png")
         fig.savefig(savename + ".png")
