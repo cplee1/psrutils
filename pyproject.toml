@@ -25,6 +25,7 @@ dependencies = [
     "tqdm",
     "uncertainties",
     "rtoml",
+    # "mwa_vcs_fluxcal @ git+https://github.com/CIRA-Pulsars-and-Transients-Group/mwa-vcs-fluxcal.git",
 ]
 
 [project.optional-dependencies]
@@ -38,6 +39,7 @@ pu-plot = "psrutils.apps.plot:main"
 pu-rmsynth = "psrutils.apps.rmsynth:main"
 pu-rmiono = "psrutils.apps.rmiono:main"
 pu-snr = "psrutils.apps.snr:main"
+pu-fluxcal = "psrutils.apps.fluxcal:main"
 
 [build-system]
 requires = ["setuptools>=75.8"]
