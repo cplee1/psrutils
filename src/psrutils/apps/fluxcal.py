@@ -136,9 +136,7 @@ logger = logging.getLogger(__name__)
     "--plot_3d", is_flag=True, help="Plot the results in 3D (time,freq,data)."
 )
 @click.option(
-    "--plot_profile_diagnostics",
-    is_flag=True,
-    help="Plot diagnostics for the profile modelling used to get the offpulse noise.",
+    "--plot_diagnostics", is_flag=True, help="Plot profile fitting diagnostics."
 )
 @click.option("-o", "--outfile", type=str, help="The prefix of the output file names.")
 def main(
@@ -162,7 +160,7 @@ def main(
     plot_tsky: bool,
     plot_integrals: bool,
     plot_3d: bool,
-    plot_profile_diagnostics: bool,
+    plot_diagnostics: bool,
     outfile: str,
 ) -> None:
     setup_logger("psrutils", log_level)
@@ -181,7 +179,7 @@ def main(
 
     # Find the onpulse using the spline method
     profile.gridsearch_onpulse_regions()
-    if plot_profile_diagnostics:
+    if plot_diagnostics:
         profile.plot_diagnostics(
             plot_underestimate=False,
             plot_overestimate=True,
