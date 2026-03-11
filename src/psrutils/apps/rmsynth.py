@@ -15,8 +15,9 @@ from psrutils import __version__, plotting
 from psrutils.cube import StokesCube
 from psrutils.logger import log_levels, setup_logger
 from psrutils.misc import pythonise
+from psrutils.polarisation import get_delta_vi
 from psrutils.profile import SplineProfile
-from psrutils.rm import get_delta_vi, rm_clean, rm_synthesis
+from psrutils.rm import rm_clean, rm_synthesis
 
 logger = logging.getLogger(__name__)
 
@@ -128,9 +129,6 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--plot_diagnostics", is_flag=True, help="Plot profile fitting diagnostics."
 )
-@click.option(
-    "--plot_publn_prof", is_flag=True, help="Plot the profile and spline fit."
-)
 @click.option("--plot_qu", is_flag=True, help="Plot the Stokes Q, U, and PPA spectra.")
 @click.option("--save_pdf", is_flag=True, help="Save plots in PDF format.")
 @click.option(
@@ -169,7 +167,6 @@ def main(
     plot_pa: bool,
     plot_pol_prof: bool,
     plot_diagnostics: bool,
-    plot_publn_prof: bool,
     plot_qu: bool,
     save_pdf: bool,
     save_phase_resolved: bool,
@@ -218,11 +215,6 @@ def main(
             sourcename=srcname_ltx,
             savename=f"{outfile}_profile_diagnostics",
             save_pdf=save_pdf,
-        )
-
-    if plot_publn_prof:
-        profile.plot_pubfig(
-            title=srcname_ltx, savename=f"{outfile}_pubfig", save_pdf=save_pdf
         )
 
     logger.info("Running RM-Synthesis...")
