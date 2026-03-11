@@ -844,58 +844,96 @@ class SplineProfile(object):
             Save the plot as a pdf?
         """
         # Create figure and axes
-        fig = plt.figure(layout="tight", figsize=(5.5, 5))
+        fig = plt.figure(layout="tight", figsize=(6, 4.5))
 
         gs = gridspec.GridSpec(2, 1, height_ratios=[3, 1], hspace=0.0, figure=fig)
 
         axT = fig.add_subplot(gs[0])
         axB = fig.add_subplot(gs[1])
+        axTi = axT.inset_axes([0.66, 0.56, 0.29, 0.35])
 
-        lw = 0.9
+        lw = 0.8
 
         xrange = [self.phases[0], self.phases[-1]]
-        bins_interp = np.linspace(self._bins[0], self._bins[-1], 1000)
+        bins_interp = np.linspace(self._bins[0], self._bins[-1], 5000)
         phases_interp = bins_interp / (self._nbin - 1)
 
         # Profile
-        axT.plot(self.phases, self._prof, color="silver", linewidth=lw, label="Data")
         axT.plot(
             phases_interp,
-            self._bspl(bins_interp),
-            color="k",
-            linewidth=lw,
+            self._bspl(bins_interp) / self.noise_est,
+            color="tab:red",
+            linewidth=1.8,
+            alpha=1,
             label="Spline",
+        )
+        axT.plot(
+            self.phases,
+            self._prof / self.noise_est,
+            color="k",
+            linestyle="-",
+            linewidth=lw,
+            marker="o",
+            markersize=2,
+            label="Data",
         )
         axT.axvline()
         axT.set_xticklabels([])
         axT.legend(loc="upper left")
 
+        # Whiteness
+        if hasattr(self, "_p_values") and self._p_values is not None:
+            noise_est_init = self.get_simple_noise_stats()[1]
+            noise_est_trials = self._noise_est_trials / noise_est_init
+            axTi.set_xlabel(
+                "Noise Trial, $\\hat{{\\sigma}}_i/\\hat{{\\sigma}}_\\mathrm{{est}}$",
+                fontsize=9,
+            )
+            axTi.set_ylabel("Score", fontsize=9)
+            axTi.plot(noise_est_trials, self._p_values, linewidth=lw, color="k")
+            axTi.set_xlim([noise_est_trials[0], noise_est_trials[-1]])
+            axTi.set_xscale("log")
+            axTi.set_xticks([0.2, 1, 5])
+            axTi.set_xticklabels(["0.2", "1", "5"])
+            axTi.set_ylim([-50, 0])
+            axTi.set_yticks([])
+            axTi.minorticks_on()
+            axTi.tick_params(axis="x", which="major", length=4, labelsize=9)
+            axTi.tick_params(axis="x", which="minor", length=2)
+        else:
+            axTi.set_visible(False)
+
         # Residuals
         axB.plot(
             self.phases,
-            self._prof - self._bspl(self._bins),
-            color="silver",
-            linestyle="none",
+            (self._prof - self._bspl(self._bins)) / self.noise_est,
+            color="k",
+            linestyle="-",
+            linewidth=lw,
             marker="o",
-            markersize=0.8,
+            markersize=2,
         )
-        axB.axhline(0, linestyle="--", color="k", linewidth=lw)
-        axB.axhline(0, linestyle="--", color="k", linewidth=lw)
-        axB.set_ylim([-4 * self.noise_est, 4 * self.noise_est])
+        axB.axhline(0, linestyle=":", color="k", linewidth=lw)
+        axB.set_ylim([-5, 5])
 
         # Ticks
         for ax in [axT, axB]:
             ax.set_xlim(xrange)
-            ax.minorticks_on()
             ax.tick_params(which="both", right=True, top=True)
+            ax.minorticks_on()
             ax.tick_params(axis="both", which="both", direction="in")
             ax.tick_params(axis="both", which="major", length=4)
             ax.tick_params(axis="both", which="minor", length=2)
+            ax.xaxis.set_major_locator(mpl.ticker.MultipleLocator(0.1))
+            ax.xaxis.set_minor_locator(mpl.ticker.MultipleLocator(0.01))
+
+        axB.set_yticks([-3, 0, 3])
+        axB.yaxis.set_minor_locator(mpl.ticker.MultipleLocator(1))
 
         # Labels
         axB.set_xlabel("Pulse Phase")
-        axB.set_ylabel("Residuals")
-        axT.set_ylabel("Normalised Intensity")
+        axB.set_ylabel("Resid. [$\\hat{{\\sigma}}$]")
+        axT.set_ylabel("Profile [$\\hat{{\\sigma}}$]")
         fig.align_ylabels()
         if title is not None:
             axT.set_title(title)
