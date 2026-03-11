@@ -37,6 +37,9 @@ logger = logging.getLogger(__name__)
 @click.option(
     "--plot_diagnostics", is_flag=True, help="Plot profile fitting diagnostics."
 )
+@click.option(
+    "--plot_publn_prof", is_flag=True, help="Plot a publication-quality profile plot."
+)
 @click.option("--save_pdf", is_flag=True, help="Save plots in PDF format.")
 @click.option("-o", "--outfile", type=str, help="The prefix of the output file names.")
 def main(
@@ -47,6 +50,7 @@ def main(
     centre: bool,
     meas_widths: bool,
     plot_diagnostics: bool,
+    plot_publn_prof: bool,
     save_pdf: bool,
     outfile: str,
 ) -> None:
@@ -98,6 +102,11 @@ def main(
             sourcename=srcname_ltx,
             savename=f"{outfile}_profile_diagnostics",
             save_pdf=save_pdf,
+        )
+
+    if plot_publn_prof:
+        profile.plot_pubfig(
+            title=srcname_ltx, savename=f"{outfile}_pubfig", save_pdf=save_pdf
         )
 
     results["Offpulse_std"] = np.std(profile.profile[profile.offpulse_bins])
