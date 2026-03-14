@@ -206,7 +206,8 @@ def main(
     # measured values later (e.g. noise_est)
     peak_flux = np.max(cube.profile)
     profile = SplineProfile(cube.profile / peak_flux)
-    profile.gridsearch_onpulse_regions()
+    profile.fit_spline_gridsearch()
+    profile.get_onpulse()
     if plot_diagnostics:
         profile.plot_diagnostics(
             plot_overestimate=True,
@@ -223,14 +224,12 @@ def main(
     results["RM_search_resolution"] = rmres
     phi = np.arange(rmmin, rmmax + rmres, rmres)
     try:
-        if len(profile.overest_onpulse_bins) == 0:
+        onpulse_bins = profile.bins[profile.overest_onpulse_mask]
+        offpulse_bins = profile.bins[profile.offpulse_mask]
+        if len(onpulse_bins) == 0:
             onpulse_bins = None
-        else:
-            onpulse_bins = profile.overest_onpulse_bins
-        if len(profile.offpulse_bins) == 0:
+        if len(offpulse_bins) == 0:
             offpulse_bins = None
-        else:
-            offpulse_bins = profile.offpulse_bins
     except AttributeError:
         # If no maxima were found
         onpulse_bins = None

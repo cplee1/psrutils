@@ -78,7 +78,8 @@ def main(
     # measured values later (e.g. noise_est)
     peak_flux = np.max(cube.profile)
     profile = SplineProfile(cube.profile / peak_flux)
-    profile.gridsearch_onpulse_regions()
+    profile.fit_spline_gridsearch()
+    profile.get_onpulse()
 
     if meas_widths:
         peak_fracs = [0.5, 0.1]
@@ -109,14 +110,14 @@ def main(
             title=srcname_ltx, savename=f"{outfile}_pubfig", save_pdf=save_pdf
         )
 
-    results["Offpulse_std"] = np.std(profile.profile[profile.offpulse_bins])
+    results["Offpulse_std"] = np.std(profile.profile[profile.offpulse_mask])
     results["Residual_std"] = np.std(profile.residuals)
-    results["W_eq"] = profile.w_eq
+    results["W_eq"] = profile.width_eq
 
     # Eq 7.1 on pg 167 of Lorimer and Kramer (2012)
     # For pure Gaussian noise, the S/N is invariant under up/down-sampling
-    results["SNR"] = np.sum(profile.profile) / (
-        np.std(profile.residuals) * np.sqrt(profile.w_eq)
+    results["SNR"] = np.sum(profile.debase_profile) / (
+        np.std(profile.residuals) * np.sqrt(profile.width_eq)
     )
 
     if len(results) > 0:

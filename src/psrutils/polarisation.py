@@ -78,10 +78,11 @@ def get_bias_corrected_pol_profile(
     # Estimate the offpulse noise
     profile = SplineProfile(iquv[0])
     if spline:
-        profile.gridsearch_onpulse_regions()
+        profile.fit_spline_gridsearch()
+        profile.get_onpulse()
         sigma_i = float(profile.noise_est)
     else:
-        sigma_i = float(profile.get_simple_noise_stats()[1])
+        sigma_i = float(profile.offpulse_window_stats()[1])
 
     # Measured Stokes L
     l_meas: NDArray[np.float64] = np.sqrt(iquv[1] ** 2 + iquv[2] ** 2)

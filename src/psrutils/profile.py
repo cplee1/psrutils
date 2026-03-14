@@ -17,12 +17,11 @@ from scipy.interpolate import BSpline, PPoly, splrep
 from statsmodels.sandbox.stats.runs import runstest_1samp
 from statsmodels.stats.diagnostic import acorr_ljungbox
 
-__all__ = ["SplineProfile", "get_profile_mask_from_pairs", "get_offpulse_from_onpulse"]
+__all__ = ["SplineProfile", "get_profile_mask_from_pairs", "invert_bin_pairs"]
 
 logger = logging.getLogger(__name__)
 
 
-# TODO: Format docstrings
 class SplineProfile(object):
     """A class for storing and analysing a pulse profile"""
 
@@ -34,139 +33,161 @@ class SplineProfile(object):
         profile : array_like
             A 1-dimensional array containing the pulse profile.
         """
-        profile = np.array(profile, dtype=float)
+        profile = np.array(profile, dtype=np.float64)
 
         if profile.ndim != 1:
             raise ValueError("profile must be a 1-dimensional array")
 
-        self._prof = profile
-        self._nbin = profile.size
-        self._bins = np.arange(self._nbin, dtype=int)
-        self._llim = self._bins[0]
-        self._rlim = self._bins[0] + self._nbin
-        self._lims = (self._llim, self._rlim)
-        self._noise_est: np.float_ | None = None
+        self._profile = profile
+        self._spline_fitted: bool = False
+        self._get_onpulse_attempted: bool = False
 
     @property
-    def profile(self) -> NDArray[np.float_]:
-        """The real pulse profile."""
-        return self._prof
+    def profile(self) -> NDArray[np.float64]:
+        """The pulse profile."""
+        return self._profile
 
     @property
     def nbin(self) -> int:
         """The number of phase bins in the profile."""
-        return self._nbin
+        return self.profile.size
 
     @property
-    def bins(self) -> NDArray[np.int_]:
+    def bins(self) -> NDArray[np.int64]:
         """An array of bin indices."""
-        return self._bins
+        return np.arange(self.nbin, dtype=np.int64)
 
     @property
-    def phases(self) -> NDArray[np.float_]:
+    def phases(self) -> NDArray[np.float64]:
         """An array of bin phases."""
-        return self._bins / (self._nbin - 1)
-
-    @property
-    def w_eq(self) -> float:
-        """The equivalent pulse width in bins."""
-        return np.sum(self._prof) / np.max(self._prof)
+        return self.bins / (self.nbin - 1)
 
     @property
     def bspl(self) -> BSpline:
         """The spline fit to the pulse profile as a BSPpline object."""
         if not hasattr(self, "_bspl") or self._bspl is None:
-            raise AttributeError("The spline fit has not been computed")
+            raise AttributeError("Spline has not been fitted.")
         return self._bspl
+
+    @property
+    def d1_bspl(self) -> BSpline:
+        """The first derivative of the spline fit to the pulse profile as
+        a BSPpline object."""
+        if not hasattr(self, "_d1_bspl") or self._d1_bspl is None:
+            raise AttributeError("Spline has not been fitted.")
+        return self._d1_bspl
+
+    @property
+    def d2_bspl(self) -> BSpline:
+        """The second derivative of the spline fit to the pulse profile as
+        a BSPpline object."""
+        if not hasattr(self, "_d2_bspl") or self._d2_bspl is None:
+            raise AttributeError("Spline has not been fitted.")
+        return self._d2_bspl
 
     @property
     def ppoly(self) -> PPoly:
         """The spline fit to the pulse profile as a PPoly object."""
         if not hasattr(self, "_ppoly") or self._ppoly is None:
-            raise AttributeError("The spline fit has not been computed")
+            raise AttributeError("Spline has not been fitted.")
         return self._ppoly
 
     @property
-    def residuals(self) -> NDArray[np.float_]:
-        """The real profile subtract the smoothed profile."""
-        if not hasattr(self, "_bspl") or self._bspl is None:
-            raise AttributeError("The spline fit has not been computed")
-        return self._prof - self._bspl(self._bins)
+    def d1_ppoly(self) -> BSpline:
+        """The first derivative of the spline fit to the pulse profile as
+        a PPoly object."""
+        if not hasattr(self, "_d1_ppoly") or self._d1_ppoly is None:
+            raise AttributeError("Spline has not been fitted.")
+        return self._d1_ppoly
 
     @property
-    def noise_est(self) -> np.float_:
-        """An estimate of the standard deviation of the offpulse noise."""
-        if hasattr(self, "_noise_est") and self._noise_est is not None:
-            return self._noise_est
-        return np.std(self.residuals)
+    def d2_ppoly(self) -> BSpline:
+        """The second derivative of the spline fit to the pulse profile as
+        a PPoly object."""
+        if not hasattr(self, "_d2_ppoly") or self._d2_ppoly is None:
+            raise AttributeError("Spline has not been fitted.")
+        return self._d2_ppoly
 
     @property
-    def baseline_est(self) -> np.float_:
-        """An estimate of the mean of the offpulse noise"""
-        mask = get_profile_mask_from_pairs(self._nbin, self.offpulse_pairs)
-        return np.mean(self._prof[mask])
+    def residuals(self) -> NDArray[np.float64]:
+        """The difference between the profile and the spline."""
+        return self.profile - self.bspl(self.bins)
+
+    @property
+    def offpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
+        """A list of pairs of bins defining the offpulse."""
+        if not self._get_onpulse_attempted:
+            raise AttributeError("Offpulse has not been computed.")
+        elif self._offpulse_pairs is None:
+            raise AttributeError("Offpulse could not be identified.")
+        return self._offpulse_pairs
 
     @property
     def underest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
-        """A list of pairs of bin indices defining the underestimated
-        onpulse region(s)."""
-        if (
-            not hasattr(self, "_underest_onpulse_pairs")
-            or self._underest_onpulse_pairs is None
-        ):
-            raise AttributeError("Onpulse has not been computed")
+        """A list of pairs of bins defining the underestimated onpulse."""
+        if not self._get_onpulse_attempted:
+            raise AttributeError("Onpulse has not been computed.")
+        elif self._underest_onpulse_pairs is None:
+            raise AttributeError("Onpulse could not be identified.")
         return self._underest_onpulse_pairs
 
     @property
     def overest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
-        """A list of pairs of bin indices defining the overestimated
-        onpulse region(s)."""
-        if (
-            not hasattr(self, "_overest_onpulse_pairs")
-            or self._overest_onpulse_pairs is None
-        ):
-            raise AttributeError("Onpulse has not been computed")
+        """A list of pairs of bins defining the overestimated onpulse."""
+        if not self._get_onpulse_attempted:
+            raise AttributeError("Onpulse has not been computed.")
+        elif self._overest_onpulse_pairs is None:
+            raise AttributeError("Onpulse could not be identified.")
         return self._overest_onpulse_pairs
 
     @property
-    def offpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
-        """A list of pairs of bin indices defining the offpulse
-        region(s)."""
-        if not hasattr(self, "_offpulse_pairs") or self._offpulse_pairs is None:
-            raise AttributeError("Offpulse has not been computed")
-        return self._offpulse_pairs
+    def offpulse_mask(self) -> NDArray[np.bool_]:
+        """A profile mask that is True for offpulse bins."""
+        return get_profile_mask_from_pairs(self.nbin, self.offpulse_pairs)
 
     @property
-    def underest_onpulse_bins(self) -> NDArray[np.int_]:
-        """An array of bins in the underestimated onpulse region(s)."""
-        if (
-            not hasattr(self, "_underest_onpulse_pairs")
-            or self._underest_onpulse_pairs is None
-        ):
-            raise AttributeError("Onpulse has not been computed")
-        mask = get_profile_mask_from_pairs(self._nbin, self._underest_onpulse_pairs)
-        return self._bins[mask]
+    def underest_onpulse_mask(self) -> NDArray[np.bool_]:
+        """A profile mask that is True for underestimated onpulse bins."""
+        return get_profile_mask_from_pairs(self.nbin, self.underest_onpulse_pairs)
 
     @property
-    def overest_onpulse_bins(self) -> NDArray[np.int_]:
-        """An array of bins in the overestimated onpulse region(s)."""
-        if (
-            not hasattr(self, "_overest_onpulse_pairs")
-            or self._overest_onpulse_pairs is None
-        ):
-            raise AttributeError("Onpulse has not been computed")
-        mask = get_profile_mask_from_pairs(self._nbin, self._overest_onpulse_pairs)
-        return self._bins[mask]
+    def overest_onpulse_mask(self) -> NDArray[np.bool_]:
+        """A profile mask that is True for overestimated onpulse bins."""
+        return get_profile_mask_from_pairs(self.nbin, self.overest_onpulse_pairs)
 
     @property
-    def offpulse_bins(self) -> NDArray[np.int_]:
-        """An array of bins in the offpulse region(s)."""
-        if not hasattr(self, "_offpulse_pairs") or self._offpulse_pairs is None:
-            raise AttributeError("Offpulse has not been computed")
-        mask = get_profile_mask_from_pairs(self._nbin, self._offpulse_pairs)
-        return self._bins[mask]
+    def baseline_est(self) -> None:
+        """An estimation of the profile baseline."""
+        if not self._get_onpulse_attempted or self._offpulse_pairs is None:
+            return self.offpulse_window_stats()[0]
+        else:
+            offpulse = self.profile[self.offpulse_mask]
+            if len(offpulse) < 10:
+                return self.offpulse_window_stats()[0]
+            else:
+                return np.mean(offpulse)
 
-    def get_opt_pulse_window(
+    @property
+    def noise_est(self) -> None:
+        """An estimation of the noise in the profile."""
+        return np.std(self.residuals)
+
+    @property
+    def debase_profile(self) -> None:
+        """The baseline-subtracted pulse profile."""
+        return self.profile - self.baseline_est
+
+    @property
+    def debase_spline_profile(self) -> None:
+        """The baseline-subtracted smoothed pulse profile."""
+        return self.bspl(self.bins) - self.baseline_est
+
+    @property
+    def width_eq(self) -> float:
+        """The equivalent pulse width in bins."""
+        return np.sum(self.debase_profile) / np.max(self.debase_profile)
+
+    def sliding_window(
         self, windowsize: int | None = None, maximise: bool = False
     ) -> tuple[int, int]:
         """Find the pulse window which minimises/maximises the integrated
@@ -179,72 +200,84 @@ class SplineProfile(object):
 
         Parameters
         ----------
-        windowsize : `int`, optional
+        windowsize : int, default: nbin//8
             Window width (in bins) defining the trial regions to integrate.
-            If `None`, then will use 1/8 of the profile. Default: `None`.
-        maximise : `bool`, optional
-            If `True`, will maximise the integral; otherwise, will
-            minimise. Default: `False`.
+        maximise : bool, default: False
+            Whether to maximise the integral rather than minimise.
 
         Returns
         -------
-        left_idx : `int`
-            The bin index of the leading edge of the window.
-        right_idx : `int`
-            The bin index of the trailing edge of the window.
+        left_idx, right_idx : int
+            The indices of the leading and trailing edges of the window.
         """
         if windowsize is None:
-            windowsize = self._nbin // 8
+            windowsize = self.nbin // 8
 
-        integral = np.zeros_like(self._prof)
-        for i in range(self._nbin):
-            win = np.arange(i - windowsize // 2, i + windowsize // 2) % self._nbin
-            integral[i] = np.trapz(self._prof[win])
+        integral = np.zeros(self.nbin)
+        for i in range(self.nbin):
+            win = np.arange(i - windowsize // 2, i + windowsize // 2) % self.nbin
+            integral[i] = np.trapz(self.profile[win])
 
         if maximise:
             opt_idx = np.argmax(integral)
         else:
             opt_idx = np.argmin(integral)
 
-        left_idx = (opt_idx - windowsize // 2) % self._nbin
-        right_idx = (opt_idx + windowsize // 2) % self._nbin
+        left_idx = (opt_idx - windowsize // 2) % self.nbin
+        right_idx = (opt_idx + windowsize // 2) % self.nbin
 
-        return left_idx, right_idx
+        return int(left_idx), int(right_idx)
 
-    # TODO: Make docstring
-    def get_simple_noise_stats(self) -> tuple[np.float_, np.float_]:
+    def offpulse_window_stats(
+        self, windowsize: int | None = None
+    ) -> tuple[float, float]:
+        """Get the mean and standard deviation of the offpulse window
+        located using the sliding window method.
+
+        Parameters
+        ----------
+        windowsize : int, default: nbin//8
+            Window width (in bins) defining the trial regions to integrate.
+
+        Returns
+        -------
+        offpulse_mean : float
+            The mean of the samples in the offpulse window.
+        offpulse_std : float
+            The standard deviation of the samples in the offpulse window.
+        """
         # Find the window with the minimum integrated flux within it
-        op_l, op_r = self.get_opt_pulse_window()
+        op_l, op_r = self.sliding_window(windowsize)
 
         # Mask out the onpulse
         if op_r > op_l:
             mask = np.where(
-                np.logical_and(self._bins > op_l, self._bins < op_r), True, False
+                np.logical_and(self.bins > op_l, self.bins < op_r), True, False
             )
         else:
             mask = np.where(
-                np.logical_or(self._bins > op_l, self._bins < op_r), True, False
+                np.logical_or(self.bins > op_l, self.bins < op_r), True, False
             )
-        offpulse = self._prof[mask]
+        offpulse = self.profile[mask]
 
-        return np.mean(offpulse), np.std(offpulse)
+        return float(np.mean(offpulse)), float(np.std(offpulse))
 
     def fit_spline(self, sigma: float, k: int = 5) -> None:
         """Fit a periodic smoothing spline with a smoothness equal to
-        `nbin*sigma**2`, where `sigma` is an estimate of the standard
-        deviation of the noise in the profile.
+        `nbin*sigma**2`, where `sigma` is the estimated standard deviation
+        of the noise in the profile.
 
         Parameters
         ----------
-        sigma : `float`
+        sigma : float
             The standard deviation of the noise in the profile.
-        k : `int`
+        k : int, default: 5
             The degree of the spline fit. See `scipy.interpolate.splrep()`
             for details.
         """
         # Fit a degree-k smoothing spline in the B-spline basis with
         # periodic boundary conditions
-        tck = splrep(self._bins, self._prof, k=k, s=self._nbin * sigma**2, per=True)
+        tck = splrep(self.bins, self.profile, k=k, s=self.nbin * sigma**2, per=True)
         bspl = BSpline(*tck, extrapolate="periodic")
         d1_bspl = bspl.derivative(nu=1)
         d2_bspl = bspl.derivative(nu=2)
@@ -260,81 +293,76 @@ class SplineProfile(object):
         self._ppoly = ppoly
         self._d1_ppoly = d1_ppoly
         self._d2_ppoly = d2_ppoly
+        self._spline_fitted = True
 
-    def get_onpulse_regions(
-        self, noise_est: float | None = None, sigma_cutoff: float = 2.0
-    ) -> tuple[
-        list[tuple[np.float_, np.float_]] | None,
-        list[tuple[np.float_, np.float_]] | None,
-        list[np.float_] | None,
-    ]:
-        """Find under- and over-estimates of the onpulse region(s) usin
-        the following method:
-
-        (1) Fit a smoothing spline with the smoothness parameter set to
-            `nbin*noise_est**2`.
-
-        (2) Find the maxima of the profile that exceed
-            `noise_est*sigma_cutoff`.
-
-        (3) Find the flanking inflections and minima around the maxima.
-            These define the under- and over-estimates of the onpulse
-            regions, respectively. If the flux between two adjacent onpulse
-            regions exceeds `noise_est*sigma_cutoff`, then considered them
-            a single region.
+    def fit_spline_gridsearch(self, ntrials: int = 1000, logspan: float = 5.0) -> None:
+        """Perform a gridsearch over the smoothness parameter to find the spline
+        fit which results in the whitest residuals.
 
         Parameters
         ----------
-        noise_est : `float`, optional
-            An estimate of the standard deviation of the offpulse noise
-            that will be used to determine if a pulse peak exceeds the
-            sigma cutoff. If `None` is given, then the noise will be
-            estimated using the `get_simple_noise_stats()` method.
-            Default: `None`.
-        sigma_cutoff : `float`, optional
-            The number of standard deviations above which a peak will be
-            considered real. Default: 2.0.
-
-        Returns
-        -------
-        underest_onpulse_pairs : `list[tuple[np.float_, np.float_]] | None`
-            A list of intervals defining the underestimated onpulse
-            region(s) in bin units.
-        overest_onpulse_pairs : `list[tuple[np.float_, np.float_]] | None`
-            A list of intervals defining the overestimated onpulse
-            region(s) in bin units.
-        true_maxima : `list[np.float_] | None`
-            A list of profile maxima above the sigma threshold in bin
-            units.
-        minima : `list[np.float_] | None`
-            A list of all profile minima in bin units.
+        ntrials : int, default: 1000
+            The number of trials to evaluate over the search range.
+        logspan : float, default: 5.0
+            Search in the range [sigma/logspan, sigma*logspan], where sigma is
+            an estimate of the noise in the profile.
         """
-        if noise_est is None:
-            noise_est = self.get_simple_noise_stats()[1]
+        # Get an initial noise estimate using the sliding window method
+        noise_est = self.offpulse_window_stats()[1]
 
-        # This will update the non-public spline attributes
-        self.fit_spline(noise_est)
+        # Define log-spaced trials in the specified search range
+        noise_est_trials = np.logspace(
+            np.log10(noise_est / logspan), np.log10(noise_est * logspan), ntrials
+        )
+
+        p_values = np.empty(ntrials)
+        for ii in range(ntrials):
+            self.fit_spline(noise_est_trials[ii])
+            # Runs test for non-random runs of signs
+            p_runs = float(runstest_1samp(self.residuals)[1])
+            # Ljung-Box test for autocorrelations
+            p_lb = float(acorr_ljungbox(self.residuals, lags=[20])["lb_pvalue"])
+            # Calculate a "whiteness" score which is the log of the combined
+            # p-values, but note that since the tests are not independent, this
+            # does not represent a true p-value
+            p_values[ii] = np.log10(p_runs) + np.log10(p_lb)
+
+        # Maximise the whiteness score
+        idx_best = np.argmax(p_values)
+        noise_est_best = noise_est_trials[idx_best]
+
+        # Re-run the best spline fit
+        self.fit_spline(noise_est_best)
+
+        self._noise_est_trials = noise_est_trials
+        self._p_values = p_values
+
+    def get_onpulse(self, sigma_cutoff: float = 2.0) -> None:
+        if not self._spline_fitted:
+            raise AttributeError("Spline has not been fitted.")
+
+        std_noise = self.noise_est
 
         # Evaluate the roots of the spline derivatives
         try:
-            d1_roots = self._d1_ppoly.roots()
-            d2_roots = self._d2_ppoly.roots()
+            d1_roots = self.d1_ppoly.roots()
+            d2_roots = self.d2_ppoly.roots()
         except ValueError:
             logger.error("Roots of spline could not be found.")
             return None, None, None, None
 
         # Remove out-of-bounds roots
-        d1_roots = _get_inbounds_roots(d1_roots, self._lims)
-        d2_roots = _get_inbounds_roots(d2_roots, self._lims)
+        d1_roots = _get_inbounds_roots(d1_roots, [self.bins[0], self.bins[-1]])
+        d2_roots = _get_inbounds_roots(d2_roots, [self.bins[0], self.bins[-1]])
 
         # Catagorise minima and maxima
         true_maxima = []
         minima = []
         for root in d1_roots:
-            if self._d2_bspl(root) > 0:  # Minimum
+            if self.d2_bspl(root) > 0:  # Minimum
                 minima.append(root)
             else:  # Maximum
-                if self._bspl(root) > noise_est * sigma_cutoff:
+                if self.bspl(root) > std_noise * sigma_cutoff:
                     # We only care about true maxima
                     true_maxima.append(root)
 
@@ -350,192 +378,45 @@ class SplineProfile(object):
 
         # Fill the onpulse regions if there is signal between them
         underest_onpulse_pairs = _fill_onpulse_regions(
-            underest_onpulse_pairs, self._bspl, noise_est, 1.0, self._lims
+            underest_onpulse_pairs,
+            self.bspl,
+            std_noise,
+            1.0,
+            [self.bins[0], self.bins[-1]],
         )
         overest_onpulse_pairs = _fill_onpulse_regions(
-            overest_onpulse_pairs, self._bspl, noise_est, 1.0, self._lims
+            overest_onpulse_pairs,
+            self.bspl,
+            std_noise,
+            1.0,
+            [self.bins[0], self.bins[-1]],
         )
 
-        return underest_onpulse_pairs, overest_onpulse_pairs, true_maxima, minima
-
-    def gridsearch_onpulse_regions(
-        self, ntrials: int = 1000, logspan: float = 5.0, sigma_cutoff: float = 2.0
-    ) -> None:
-        """Perform a gridsearch over the smoothness parameter to find the spline
-        fit which results in the whitest residuals.
-
-        Parameters
-        ----------
-        ntrials : int, default: 1000
-            The number of trials to evaluate over the search range.
-        logspan : float, default: 5.0
-            Search in the range [sigma/logspan, sigma*logspan], where sigma is
-            an estimate of the noise in the profile.
-        sigma_cutoff : float, default: 2.0
-            The number of standard deviations above which a peak will be
-            considered real.
-        """
-        # Get an initial noise estimate using the sliding window method
-        noise_est = self.get_simple_noise_stats()[1]
-
-        # Define log-spaced trials in the specified search range
-        noise_est_trials = np.logspace(
-            np.log10(noise_est / logspan), np.log10(noise_est * logspan), ntrials
-        )
-
-        p_values = np.empty(ntrials)
-        for ii in range(ntrials):
-            self.fit_spline(noise_est_trials[ii])
-            # Runs test for non-random runs of signs
-            p_runs = float(runstest_1samp(self.residuals)[1])
-            # Ljung-Box test for autocorrelations
-            p_lb = float(acorr_ljungbox(self.residuals, lags=[20])["lb_pvalue"])
-            # Calculate a "whiteness score" which is the log of the combined
-            # p-values, but note that since the tests are not independent, this
-            # does not represent a true p-value
-            p_values[ii] = np.log10(p_runs) + np.log10(p_lb)
-
-        # Maximise the whiteness score
-        idx_best = np.argmax(p_values)
-        noise_est_best = noise_est_trials[idx_best]
-
-        underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
-            noise_est_best, sigma_cutoff=sigma_cutoff
-        )
-        if overest_onpp is None or underest_onpp is None:
-            offpp = None
+        if underest_onpulse_pairs is None or overest_onpulse_pairs is None:
+            offpulse_pairs = None
         else:
-            offpp = get_offpulse_from_onpulse(overest_onpp)
+            offpulse_pairs = invert_bin_pairs(overest_onpulse_pairs)
 
-        self._noise_est_trials = noise_est_trials
-        self._p_values = p_values
-        self._offpulse_pairs = offpp
-        self._overest_onpulse_pairs = overest_onpp
-        self._underest_onpulse_pairs = underest_onpp
-        self._maxima = maxima
+        self._underest_onpulse_pairs = underest_onpulse_pairs
+        self._overest_onpulse_pairs = overest_onpulse_pairs
+        self._offpulse_pairs = offpulse_pairs
+        self._maxima = true_maxima
         self._minima = minima
-        self._noise_est = noise_est_best
+        self._get_onpulse_attempted = True
 
-    # def bootstrap_onpulse_regions(
-    #     self, ntrials: int = 10, tol: float = 0.05, sigma_cutoff: float = 2.0
-    # ) -> None:
-    #     """Bootstrap the onpulse-finding method by fitting a spline with
-    #     the new estimated offpulse noise on each iteration. The
-    #     bootstrapping is repeated until either the maximum number of trials
-    #     has been reaches or the fractional difference between subsequent
-    #     noise estimates falls below a specified tolerance.
-
-    #     See the `get_onpulse_regions()` method for further details.
-
-    #     Parameters
-    #     ----------
-    #     ntrials : `int`, optional
-    #         The maximum number of times to iterate the noise estimate.
-    #         Default 10.
-    #     tol : `float`, optional
-    #         The minimum fractional difference between subsequent noise
-    #         estimates before exiting the loop. Default 0.1.
-    #     sigma_cutoff : `float`, optional
-    #         The number of standard deviations above which a peak will be
-    #         considered real. Default 2.0.
-    #     """
-    #     logger.debug("Bootstrapping to estimate onpulse...")
-
-    #     old_noise_est = self.get_simple_noise_stats()[1]
-    #     logger.debug(f"Initial noise estimate: {old_noise_est}")
-
-    #     underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
-    #         old_noise_est, sigma_cutoff=sigma_cutoff
-    #     )
-    #     if overest_onpp is None or underest_onpp is None:
-    #         raise RuntimeError("Bootstrapping failed on initial run")
-
-    #     old_offpp = get_offpulse_from_onpulse(overest_onpp)
-    #     old_overest_onpp = overest_onpp
-    #     old_underest_onpp = underest_onpp
-    #     old_maxima = maxima
-    #     old_minima = minima
-    #     old_tollvl = None
-
-    #     for trial in range(ntrials):
-    #         # Calculate the offpulse noise
-    #         mask = get_profile_mask_from_pairs(self._nbin, old_offpp)
-
-    #         if np.all(np.logical_not(mask)):
-    #             logger.warning("Offpulse and onpulse region cannot be separated")
-    #             break
-
-    #         # Perform a normal test on the offpulse samples and the spline
-    #         # residuals, and estimate the noise from whichever one is more
-    #         # normally distributed
-    #         if shapiro(self.residuals)[1] > shapiro(self._prof[mask])[1]:
-    #             logger.debug("Using residuals to estimate noise")
-    #             new_noise_est = np.std(self.residuals)
-    #         else:
-    #             logger.debug("Using offpulse to estimate noise")
-    #             new_noise_est = np.std(self._prof[mask])
-
-    #         if np.isclose(new_noise_est, 0.0):
-    #             logger.warning("New noise estimate is zero")
-    #             break
-
-    #         # Check whether the tolerance level has been reached
-    #         new_tollvl = abs((old_noise_est - new_noise_est) / new_noise_est)
-    #         logger.debug(f"Trial {trial + 1}: {new_noise_est=} {new_tollvl=}")
-
-    #         if old_tollvl is not None and new_tollvl > old_tollvl:
-    #             logger.debug(f"Hit tolerance minimum on trial {trial}")
-    #             break
-
-    #         if new_tollvl <= tol:
-    #             logger.debug(f"Reached tolerance on trial {trial + 1}")
-    #             break
-
-    #         if trial + 1 == ntrials:
-    #             logger.debug(f"Reached max number of trials ({ntrials})")
-    #             break
-
-    #         # Perform the analysis
-    #         underest_onpp, overest_onpp, maxima, minima = self.get_onpulse_regions(
-    #             new_noise_est, sigma_cutoff=sigma_cutoff
-    #         )
-    #         if overest_onpp is None or underest_onpp is None:
-    #             logger.warning(f"Bootstrapping failed on trial {trial}")
-    #             # Roll back the spline attributes to the previous fit
-    #             self.fit_spline(old_noise_est)
-    #             break
-
-    #         old_offpp = get_offpulse_from_onpulse(overest_onpp)
-    #         old_overest_onpp = overest_onpp
-    #         old_underest_onpp = underest_onpp
-    #         old_maxima = maxima
-    #         old_minima = minima
-    #         old_noise_est = new_noise_est
-    #         old_tollvl = new_tollvl
-
-    #     self._offpulse_pairs = old_offpp
-    #     self._overest_onpulse_pairs = old_overest_onpp
-    #     self._underest_onpulse_pairs = old_underest_onpp
-    #     self._maxima = old_maxima
-    #     self._minima = old_minima
-    #     self._noise_est = old_noise_est
-
-    def measure_pulse_widths(self, peak_fracs: list | None = None) -> None:
-        """Measure the pulse width(s) in bins at a given fraction of the peak
-        flux density.
+    def measure_pulse_widths(self, peak_fracs: list[float] | None = None) -> None:
+        """Measure the pulse width(s) in bins at a given fraction of the
+        peak flux density.
 
         Parameters
         ----------
-        peak_fracs : `list`, optional
+        peak_fracs : list[float], default: [0.5, 0.1]
             The peak fraction to find the width(s) at (i.e. 0.1 for W10).
-            Default: [0.5, 0.1].
         """
         try:
-            assert self._ppoly, "spline has not been fit"
-            assert self._d1_ppoly, "spline has not been fit"
-            assert self._maxima, "no true profile maxima found"
-            assert self._minima, "no profile minima found"
-            assert self._noise_est, "noise estimate not defined"
+            assert self._spline_fitted, "Spline has not been fitted."
+            assert self._maxima, "No profile maxima found."
+            assert self._minima, "No profile minima found."
         except AssertionError as e:
             logger.error(f"Cannot measure pulse widths: {e}")
             return
@@ -543,8 +424,8 @@ class SplineProfile(object):
         if peak_fracs is None:
             peak_fracs = [0.5, 0.1]
 
-        peak_flux = np.max(self._ppoly(np.array(self._maxima)))
-        peak_snr = peak_flux / self._noise_est
+        peak_flux = np.max(self.ppoly(np.array(self._maxima)))
+        peak_snr = peak_flux / self.noise_est
 
         widths_dict = {}
         for peak_frac in peak_fracs:
@@ -553,10 +434,10 @@ class SplineProfile(object):
                 continue
             logger.debug(f"Measuring W{peak_frac * 100:.0f} for S/N={peak_snr:.1f}")
 
-            roots = self._ppoly.solve(peak_frac * peak_flux)
+            roots = self.ppoly.solve(peak_frac * peak_flux)
 
             # Remove out-of-bounds roots
-            roots = _get_inbounds_roots(roots, self._lims)
+            roots = _get_inbounds_roots(roots, [self.bins[0], self.bins[-1]])
 
             # There must be an even number of roots
             try:
@@ -570,7 +451,7 @@ class SplineProfile(object):
             root_pairs = []
             current_pair = []
             for ii in range(len(roots)):
-                if ii == 0 and self._d1_ppoly(roots[ii]) < 0.0:
+                if ii == 0 and self.d1_ppoly(roots[ii]) < 0.0:
                     # The first root is a trailing edge
                     continue
                 else:
@@ -589,7 +470,11 @@ class SplineProfile(object):
 
             # Fill the pairs if there is signal between them
             root_pairs = _fill_onpulse_regions(
-                root_pairs, self._bspl, self._noise_est, 1.0, self._lims
+                root_pairs,
+                self.bspl,
+                self.noise_est,
+                1.0,
+                [self.bins[0], self.bins[-1]],
             )
 
             widths = []
@@ -597,7 +482,7 @@ class SplineProfile(object):
                 if root_pair[0] < root_pair[1]:
                     width = root_pair[1] - root_pair[0]
                 else:
-                    width = root_pair[1] - self._llim + self._rlim - root_pair[0]
+                    width = root_pair[1] - self.bins[0] + self.bins[-1] - root_pair[0]
                 widths.append((root_pair, width))
 
             widths_dict[f"W{peak_frac * 100:.0f}"] = (
@@ -623,20 +508,19 @@ class SplineProfile(object):
 
         Parameters
         ----------
-        plot_underestimate : `bool`, optional
-            Show the onpulse underestimate(s). Default: `True`.
-        plot_overestimate : `bool`, optional
-            Show the onpulse overestimate(s). Default: `True`.
-        plot_width : `bool`, optional
-            Show the width estimate(s). Default: `True`.
-        lw : `float`, optional
-            The linewidth to use in all subplots. Default: 0.9.
-        sourcename : `str`, optional
+        plot_underestimate : bool, default: True
+            Show the onpulse underestimate(s).
+        plot_overestimate : bool, default: True
+            Show the onpulse overestimate(s).
+        plot_width : bool, default: True
+            Show the width estimate(s).
+        lw : float, default: 0.9
+            The linewidth to use in all subplots.
+        sourcename : str, default: None
             The name of the source to add to the plot.
-        savename : `str`, optional
+        savename : str, default: "profile_diagnostics"
             The name of the output plot, excluding extension.
-            Default: "profile_diagnostics".
-        save_pdf : bool, default: Fale
+        save_pdf : bool, default: False
             Save the plot as a pdf?
         """
         # Create figure and axes
@@ -654,15 +538,19 @@ class SplineProfile(object):
 
         # Profile
         axs_prof[0].set_ylabel("Profile")
-        axs_prof[0].plot(xvalues, self._prof, color="k", linewidth=lw, alpha=0.2)
-        axs_prof[0].plot(xvalues, self._bspl(self._bins), color="k", linewidth=lw)
+        axs_prof[0].plot(
+            xvalues, self.debase_profile, color="k", linewidth=lw, alpha=0.2
+        )
+        axs_prof[0].plot(xvalues, self.debase_spline_profile, color="k", linewidth=lw)
+
+        # Indicate the standard deviation of the noise
         yrangeProf0 = axs_prof[0].get_ylim()
         xpos = (xrange[1] - xrange[0]) * 0.92 + xrange[0]
         ypos = (yrangeProf0[-1] - yrangeProf0[0]) * 0.8 + yrangeProf0[0]
         axs_prof[0].errorbar(
             xpos,
             ypos,
-            yerr=np.std(self.residuals),
+            yerr=self.noise_est,
             color="k",
             marker="none",
             capsize=3,
@@ -677,11 +565,15 @@ class SplineProfile(object):
         # Cumulative profiles
         axs_prof[2].set_ylabel("Cumulative Sum")
         axs_prof[2].plot(
-            xvalues, np.cumsum(self._prof), color="k", linewidth=lw, label="Profile"
+            xvalues,
+            np.cumsum(self.debase_profile),
+            color="k",
+            linewidth=lw,
+            label="Profile",
         )
         axs_prof[2].plot(
             xvalues,
-            np.cumsum(self._bspl(self._bins)),
+            np.cumsum(self.debase_spline_profile),
             color="tab:green",
             linewidth=lw,
             label="Spline",
@@ -704,7 +596,7 @@ class SplineProfile(object):
             underest_args = dict(color="tab:blue", alpha=0.2, hatch="///", zorder=0.1)
             overest_args = dict(color="tab:blue", edgecolor=None, alpha=0.2, zorder=0)
             for pairlist, args, flag in zip(
-                [self._underest_onpulse_pairs, self._overest_onpulse_pairs],
+                [self.underest_onpulse_pairs, self.overest_onpulse_pairs],
                 [underest_args, overest_args],
                 [plot_underestimate, plot_overestimate],
                 strict=True,
@@ -742,7 +634,7 @@ class SplineProfile(object):
                 for ii, ((wl, wr), width) in enumerate(peak_pairs):
                     if ii > 0:
                         w_info_line.append(", ")
-                    w_info_line.append(f"{width:.1f} ({width / self._nbin * 100:.1f}%)")
+                    w_info_line.append(f"{width:.1f} ({width / self.nbin * 100:.1f}%)")
                     if plot_width:
                         wlp = wl * bins_to_x
                         wrp = wr * bins_to_x
@@ -769,12 +661,12 @@ class SplineProfile(object):
         # Offpulse samples histogram
         noff = 0
         if hasattr(self, "_offpulse_pairs") and self._offpulse_pairs is not None:
-            mask = get_profile_mask_from_pairs(self._nbin, self._offpulse_pairs)
+            mask = get_profile_mask_from_pairs(self.nbin, self.offpulse_pairs)
             if not np.all(np.logical_not(mask)):
-                noff = len(self._prof[mask])
+                noff = len(self.debase_profile[mask])
                 if noff > 3:
-                    mu = np.mean(self._prof[mask])
-                    hb = histogram(self._prof[mask], **hist_kwargs)
+                    mu = np.mean(self.debase_profile[mask])
+                    hb = histogram(self.debase_profile[mask], **hist_kwargs)
                     ax_hists.stairs(*hb, color="k", label="Offpulse", **stairs_kwargs)
                     ax_hists.axvline(mu, color="k", **vline_kwargs)
 
@@ -787,20 +679,24 @@ class SplineProfile(object):
 
         # p-values
         if hasattr(self, "_p_values") and self._p_values is not None:
-            ax_white.set_ylabel("Whiteness Score", fontsize=12)
-            ax_white.plot(
-                self._noise_est_trials, self._p_values, linewidth=lw, color="k"
-            )
-            ax_white.set_xlim([self._noise_est_trials[0], self._noise_est_trials[-1]])
+            noise_est_init = self.offpulse_window_stats()[1]
+            noise_est_trials = self._noise_est_trials / noise_est_init
+            ax_white.plot(noise_est_trials, self._p_values, linewidth=lw, color="k")
+            ax_white.set_xlim([noise_est_trials[0], noise_est_trials[-1]])
             ax_white.set_ylim([-100, 0])
             ax_white.set_xscale("log")
-            ax_white.set_xlabel("Std. of Noise ($\sigma$)")
+            ax_white.set_xticks([0.2, 1, 5])
+            ax_white.set_xticklabels(["0.2", "1", "5"])
+            ax_white.set_ylabel("Whiteness Score")
+            ax_white.set_xlabel(
+                "Noise Trial, $\\hat{{\\sigma}}_i/\\hat{{\\sigma}}_\\mathrm{{est}}$"
+            )
         else:
             ax_white.set_visible(False)
 
         # Final touches
         axs_prof[0].set_title(
-            sourcename + "   " + f"$N_\\mathrm{{b}}={self._nbin}$", pad=12
+            sourcename + "   " + f"$N_\\mathrm{{b}}={self.nbin}$", pad=12
         )
         axs_prof[2].set_xlabel("Pulse Phase")
 
@@ -829,7 +725,11 @@ class SplineProfile(object):
         plt.close()
 
     def plot_pubfig(
-        self, title: str | None = None, savename: str = "pubfig", save_pdf: bool = False
+        self,
+        title: str | None = None,
+        lw: float = 0.8,
+        savename: str = "pubfig",
+        save_pdf: bool = False,
     ) -> None:
         """Create a publication-quality plot showing the profile and spline.
 
@@ -837,6 +737,8 @@ class SplineProfile(object):
         ----------
         title : `str`, optional
             The plot title.
+        lw : float, default: 0.8
+            The linewidth to use in all subplots.
         savename : `str`, optional
             The name of the output plot, excluding extension.
             Default: "pubfig".
@@ -852,16 +754,14 @@ class SplineProfile(object):
         axB = fig.add_subplot(gs[1])
         axTi = axT.inset_axes([0.66, 0.56, 0.29, 0.35])
 
-        lw = 0.8
-
         xrange = [self.phases[0], self.phases[-1]]
-        bins_interp = np.linspace(self._bins[0], self._bins[-1], 5000)
-        phases_interp = bins_interp / (self._nbin - 1)
+        bins_interp = np.linspace(self.bins[0], self.bins[-1], 5000)
+        phases_interp = bins_interp / (self.nbin - 1)
 
         # Profile
         axT.plot(
             phases_interp,
-            self._bspl(bins_interp) / self.noise_est,
+            (self.bspl(bins_interp) - self.baseline_est) / self.noise_est,
             color="tab:red",
             linewidth=1.8,
             alpha=1,
@@ -869,7 +769,7 @@ class SplineProfile(object):
         )
         axT.plot(
             self.phases,
-            self._prof / self.noise_est,
+            self.debase_profile / self.noise_est,
             color="k",
             linestyle="-",
             linewidth=lw,
@@ -883,7 +783,7 @@ class SplineProfile(object):
 
         # Whiteness
         if hasattr(self, "_p_values") and self._p_values is not None:
-            noise_est_init = self.get_simple_noise_stats()[1]
+            noise_est_init = self.offpulse_window_stats()[1]
             noise_est_trials = self._noise_est_trials / noise_est_init
             axTi.set_xlabel(
                 "Noise Trial, $\\hat{{\\sigma}}_i/\\hat{{\\sigma}}_\\mathrm{{est}}$",
@@ -906,7 +806,7 @@ class SplineProfile(object):
         # Residuals
         axB.plot(
             self.phases,
-            (self._prof - self._bspl(self._bins)) / self.noise_est,
+            self.residuals / self.noise_est,
             color="k",
             linestyle="-",
             linewidth=lw,
@@ -948,47 +848,48 @@ class SplineProfile(object):
         plt.close()
 
 
-# TODO: Format docstring
+# ~~~ FUNCTIONS ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
 def _get_inbounds_roots(
-    roots: Iterable[np.float_], bounds: tuple[np.float_, np.float_]
-) -> NDArray[np.float_]:
+    roots: Iterable[np.floating], bounds: tuple[np.floating, np.floating]
+) -> NDArray[np.float64]:
     """Return the roots within the specified bounds.
 
     Parameters
     ----------
-    roots : `Iterable[np.float_]`
+    roots : Iterable[floating]
         A list of roots.
-    bounds : `tuple[np.float_, np.float_]`
+    bounds : tuple[floating, floating]
         The bounds to enforce.
 
     Returns
     -------
-    inbounds_roots : `NDArray[np.float_]`
+    inbounds_roots : NDArray[float64]
         An array of roots within the bounds.
     """
     inbounds_roots = []
     for root in roots:
         if root >= bounds[0] and root < bounds[1]:
             inbounds_roots.append(root)
-    return np.array(inbounds_roots)
+    return np.array(inbounds_roots, dtype=np.float64)
 
 
-# TODO: Format docstring
 def _get_flanking_roots(
-    locs: Iterable[np.float_], roots: Iterable[np.float_]
-) -> list[tuple[np.float_, np.float_]]:
+    locs: Iterable[np.floating], roots: Iterable[np.floating]
+) -> list[tuple[float, float]]:
     """Return the pairs of flanking roots around each location.
 
     Parameters
     ----------
-    locs : `Iterable[np.float_]`
+    locs : Iterable[floating]
         A list of profile locations.
-    roots : `Iterable[np.float_]`
+    roots : Iterable[floating]
         A list of profile roots.
 
     Returns
     -------
-    pairs : `list[tuple[np.float_, np.float_]]`
+    pairs : list[tuple[float, float]]
         A list of pairs of roots around the specified locations.
     """
     pairs = []
@@ -998,7 +899,7 @@ def _get_flanking_roots(
         ridx = bisect.bisect_left(roots, loc)
         lower_idx = (ridx - 1) % len(roots)
         upper_idx = ridx % len(roots)
-        pair = [roots[lower_idx], roots[upper_idx]]
+        pair = [float(roots[lower_idx]), float(roots[upper_idx])]
 
         # Remove duplicates
         if pair in raw_pairs:
@@ -1017,75 +918,34 @@ def _get_flanking_roots(
     return [tuple(pair) for pair in pairs]
 
 
-# TODO: Format docstring
-# def _get_contiguous_regions(
-#     pairs: Iterable[tuple[np.float_, np.float_]], minima: Iterable[np.float_]
-# ) -> list[tuple[np.float_, np.float_]]:
-#     """Merge together regions which are connected by a common minimum.
-
-#     Parameters
-#     ----------
-#     pairs : `Iterable[tuple[np.float_, np.float_]]`
-#         A list of pairs defining the inverval of each region.
-#     minima : `Iterable[np.float_]`
-#         A list of minima to use to connect adjacent regions.
-
-#     Returns
-#     -------
-#     new_pairs : `list[tuple[np.float_, np.float_]]`
-#         A list of pairs defining the interval of each new region.
-#     """
-#     flk_pairs = []
-#     for pair in pairs:
-#         flk_roots = _get_flanking_roots(pair, minima)
-#         flk_pairs.append((flk_roots[0][0], flk_roots[-1][1]))
-
-#     new_pairs = []
-#     new_flk_pairs = []
-#     for pair, flk_pair in zip(pairs, flk_pairs, strict=True):
-#         if new_pairs and flk_pair[0] == new_flk_pairs[-1][1]:
-#             # If the flanking minima are touching
-#             new_pairs[-1][1] = pair[1]
-#             new_flk_pairs[-1][1] = flk_pair[1]
-#         elif new_pairs and flk_pair[1] == new_flk_pairs[0][0]:
-#             # If the last element wraps around to the first
-#             new_pairs[0][0] = pair[0]
-#             new_flk_pairs[0][0] = flk_pair[0]
-#         else:
-#             new_pairs.append(list(pair))
-#             new_flk_pairs.append(list(flk_pair))
-#     return [tuple(pair) for pair in new_pairs]
-
-
-# TODO: Format docstring
 def _fill_onpulse_regions(
-    onpulse_pairs: list[tuple[np.float_, np.float_]],
+    onpulse_pairs: list[tuple[float, float]],
     bspl: BSpline,
     noise_est: float,
     sigma_cutoff: float,
-    interval: tuple[np.float_, np.float_],
-) -> list[tuple[np.float_, np.float_]]:
+    interval: tuple[float, float],
+) -> list[tuple[float, float]]:
     """Attempts to fill small gaps in the onpulse pairs provided these gaps
     exceed a set sigma threshold (i.e. they resemble real signal.)
 
     Parameters
     ----------
-    onpulse_pairs : `list[tuple[np.float_, np.float_]]`
+    onpulse_pairs : list[tuple[float, float]]
         A list of pairs of bin indices that mark the onpulse regions of the
         profile.
-    bspl : `BSpline`
+    bspl : BSpline
         The smoothed profile as a BSpline object.
-    noise_est : `float`
+    noise_est : float
         The standard deviation of the offpulse noise.
-    sigma_cutoff : `float`
+    sigma_cutoff : float
         The number of standard deviations above which a signal will be
         considered real.
-    interval : `tuple[np.float_, np.float_]`
+    interval : tuple[float, float]
         The full range of bins that the pairs are a subset of.
 
     Return:
     -------
-    filled_onpulse_pairs : `list[tuple[np.float_, np.float_]]`
+    filled_onpulse_pairs : list[tuple[float, float]]
         A list of pairs of bin indices that represent the ranges of the
         filled onpulse regions.
     """
@@ -1144,23 +1004,22 @@ def _fill_onpulse_regions(
     return [tuple(pair) for pair in filled_onpulse_pairs]
 
 
-# TODO: Format docstring
 def get_profile_mask_from_pairs(
-    nbin: int, bin_pairs: Iterable[tuple[np.int_, np.int_]]
+    nbin: int, bin_pairs: Iterable[tuple[int, int]]
 ) -> NDArray[np.bool_]:
     """Return a profile with the regions defined by the bin_pairs filled
     with NaNs.
 
     Parameters
     ----------
-    nbin : `int`
+    nbin : int
         The number of phase bins in the profile.
-    bin_pairs : `Iterable[tuple[np.int_, np.int_]]`
+    bin_pairs : Iterable[tuple[int, int]]
         A list of pairs of bin indices defining the profile region(s).
 
     Returns
     -------
-    mask : `NDArray[np.bool_]`
+    mask : NDArray[np.bool_]
         A profile mask that is True between the bin pairs.
     """
     assert bin_pairs is not None
@@ -1182,35 +1041,35 @@ def get_profile_mask_from_pairs(
     return mask
 
 
-# TODO: Format docstring
-def get_offpulse_from_onpulse(
-    onpulse_pairs: list[tuple[np.int_, np.int_]],
-) -> list[tuple[np.int_, np.int_]]:
-    """Given a list of pairs of bin indices defining the onpulse regions,
-    find the corresponding list of pairs of bin indices defining the
-    offpulse regions.
+def invert_bin_pairs(
+    in_pairs: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    """Given a list of pairs of array indices defining intervals in an
+    array with periodic boundary conditions, find the complementary
+    intervals in the array. For example: find the offpulse given the
+    onpulse of a pulse profile.
 
     Parameters
     ----------
-    onpulse_pairs : `list[tuple[np.int_, np.int_]]`
-        A list of pairs of bin indices defining the onpulse.
+    in_pairs : list[tuple[int, int]]
+        A list of pairs of array indices.
 
     Returns
     -------
-    offpulse_pairs : `list[tuple[np.int_, np.int_]]`
-        A list of pairs of bin indices defining the offpulse.
+    out_pairs : list[tuple[int, int]]
+        A list of pairs of array indices defining the complementary
+        array intervals.
     """
-    offpulse_pairs = []
+    out_pairs = []
 
     # Make cycling generators to deal with wrap-around
-    current_pair_gen = itertools.cycle(onpulse_pairs)
-    next_pair_gen = itertools.cycle(onpulse_pairs)
+    current_pair_gen = itertools.cycle(in_pairs)
+    next_pair_gen = itertools.cycle(in_pairs)
     next(next_pair_gen)
 
-    # Figure out the off-pulse profile
-    for _ in range(len(onpulse_pairs)):
+    for _ in range(len(in_pairs)):
         current_pair = next(current_pair_gen)
         next_pair = next(next_pair_gen)
-        offpulse_pairs.append([current_pair[1], next_pair[0]])
+        out_pairs.append([current_pair[1], next_pair[0]])
 
-    return offpulse_pairs
+    return out_pairs

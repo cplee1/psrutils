@@ -178,7 +178,8 @@ def main(
     profile = cube.spline_profile
 
     # Find the onpulse using the spline method
-    profile.gridsearch_onpulse_regions()
+    profile.fit_spline_gridsearch()
+    profile.get_onpulse()
     if plot_diagnostics:
         profile.plot_diagnostics(
             plot_underestimate=False,
@@ -187,12 +188,8 @@ def main(
             savename=f"{outfile}_profile_diagnostics",
         )
 
-    # Get the mean and standard deviation of the noise
-    offp_mean = profile.baseline_est
-    offp_std = profile.noise_est
-
     # Normalise the profile so that the noise has a standard deviation of unity
-    snr_profile = (cube.profile - offp_mean) / offp_std
+    snr_profile = profile.debase_profile / profile.noise_est
 
     # Get pulsar coordinates
     ra_hms, dec_dms = cube.archive.get_coordinates().getHMSDMS().split(" ")
@@ -253,7 +250,7 @@ def main(
     radiometer_noise = results["SEFD_mean"] / np.sqrt(
         2 * bw_valid.to(1 / u.s) * int_time_per_bin
     )
-    flux_scale = radiometer_noise / offp_std
+    flux_scale = radiometer_noise / profile.noise_est
 
     # Flux density calculations
     flux_density_profile = snr_profile * radiometer_noise
