@@ -414,11 +414,14 @@ class SplineProfile(object):
             The peak fraction to find the width(s) at (i.e. 0.1 for W10).
         """
         try:
-            assert self._spline_fitted, "Spline has not been fitted."
-            assert self._maxima, "No profile maxima found."
-            assert self._minima, "No profile minima found."
+            assert self._spline_fitted
         except AssertionError as e:
-            logger.error(f"Cannot measure pulse widths: {e}")
+            logger.warning(f"Cannot measure pulse widths: Spline has not been fitted.")
+            return
+        try:
+            assert self._maxima
+        except AttributeError as e:
+            logger.warning(f"Cannot measure pulse widths: No profile maxima found.")
             return
 
         if peak_fracs is None:

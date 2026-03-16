@@ -200,6 +200,7 @@ def main(
     context = mwalib.MetafitsContext(metafits)
     obs_start = Time(context.sched_start_mjd, format="mjd")
     obs_end = Time(context.sched_end_mjd, format="mjd")
+    # TODO: correct the archive start/end times
     start_time = Time(cube.start_mjd, format="mjd")
     end_time = Time(cube.end_mjd, format="mjd")
     start_time_offset = 0 * u.s
@@ -210,7 +211,13 @@ def main(
             + f"differs by {(start_time - obs_start).to(u.s).to_string(precision=3)} "
             + f"to the metafits ({obs_start.mjd}). Using the archive value."
         )
-        start_time_offset = start_time - obs_start
+        if start_time_offset.to(u.s).value >= 0:
+            start_time_offset = start_time - obs_start
+        else:
+            logger.warning(
+                "The archive start time offset is less than zero."
+                + "Using a starting offset of 0 seconds."
+            )
 
     if not np.isclose(obs_end.mjd, end_time.mjd, atol=1e-5, rtol=0.0):
         logger.info(

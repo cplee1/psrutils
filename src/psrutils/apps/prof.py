@@ -110,7 +110,11 @@ def main(
             title=srcname_ltx, savename=f"{outfile}_pubfig", save_pdf=save_pdf
         )
 
-    results["Offpulse_std"] = np.std(profile.profile[profile.offpulse_mask])
+    try:
+        results["Offpulse_std"] = np.std(profile.profile[profile.offpulse_mask])
+    except AttributeError:
+        logger.warning("Offpulse_std could not be computed.")
+        pass
     results["Residual_std"] = np.std(profile.residuals)
     results["W_eq"] = profile.width_eq
 
