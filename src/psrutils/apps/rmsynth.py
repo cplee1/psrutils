@@ -194,12 +194,13 @@ def main(
     results["Source"] = srcname_raw
     results["Nbin"] = cube.num_bin
 
+    phase_rot = 0.0
     if centre:
         logger.info("Rotating the peak to the centre of the profile")
         max_idx = np.argmax(cube.profile)
         phase_rot = (max_idx - cube.num_bin // 2) / cube.num_bin
         cube.rotate_phase(phase_rot)
-        results["Phase_rotation"] = phase_rot
+    results["Phase_rotation"] = phase_rot
 
     # Note that we are normalising the profile here so that the numbers are
     # sensible, but this needs to be accounted for when accessing the
