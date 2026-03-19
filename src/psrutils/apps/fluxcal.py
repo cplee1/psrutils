@@ -3,6 +3,7 @@
 ########################################################
 
 import logging
+from typing import Any
 
 import click
 import mwalib
@@ -54,6 +55,7 @@ logger = logging.getLogger(__name__)
     type=int,
     help="Bscrunch to this number of phase bins.",
 )
+@click.option("-c", "--centre", "centre", is_flag=True, help="Centre the pulse.")
 @click.option(
     "--fine_res",
     type=float,
@@ -125,6 +127,20 @@ logger = logging.getLogger(__name__)
     show_default=True,
     help="The fraction of the integration time flagged.",
 )
+@click.option(
+    "-os",
+    "--offset_start",
+    "offset_start",
+    type=float,
+    help="Data start offset in seconds from scheduled observation start time.",
+)
+@click.option(
+    "-oe",
+    "--offset_end",
+    "offset_end",
+    type=float,
+    help="Data end offset in seconds from scheduled observation start time.",
+)
 @click.option("--plot_trec", is_flag=True, help="Plot the receiver temperature.")
 @click.option("--plot_pb", is_flag=True, help="Plot the primary beam in Alt/Az.")
 @click.option("--plot_tab", is_flag=True, help="Plot the tied-array beam in Alt/Az.")
@@ -144,6 +160,7 @@ def main(
     metafits: str,
     archive: str,
     bscrunch: int,
+    centre: bool,
     fine_res: float,
     coarse_res: float,
     min_pbp: float,
@@ -154,6 +171,8 @@ def main(
     eta: float,
     bw_flagged: float,
     time_flagged: float,
+    offset_start: float,
+    offset_end: float,
     plot_trec: bool,
     plot_pb: bool,
     plot_tab: bool,
@@ -173,6 +192,13 @@ def main(
     srcname_ltx = cube.source.replace("-", "$-$")
     if outfile is None:
         outfile = srcname_raw
+
+    phase_rot = 0.0
+    if centre:
+        logger.info("Rotating the peak to the centre of the profile")
+        max_idx = np.argmax(cube.profile)
+        phase_rot = (max_idx - cube.num_bin // 2) / cube.num_bin
+        cube.rotate_phase(phase_rot)
 
     # Get the profile as a SplineProfile object to use for analysis
     profile = cube.spline_profile
@@ -199,33 +225,18 @@ def main(
     # Get start and end times
     context = mwalib.MetafitsContext(metafits)
     obs_start = Time(context.sched_start_mjd, format="mjd")
-    obs_end = Time(context.sched_end_mjd, format="mjd")
-    # TODO: correct the archive start/end times
+    # obs_end = Time(context.sched_end_mjd, format="mjd")
     start_time = Time(cube.start_mjd, format="mjd")
     end_time = Time(cube.end_mjd, format="mjd")
-    start_time_offset = 0 * u.s
-    end_time_offset = obs_end - obs_start
-    if not np.isclose(obs_start.mjd, start_time.mjd, atol=1e-5, rtol=0.0):
-        logger.info(
-            f"Start MJD in the archive ({start_time.mjd}) "
-            + f"differs by {(start_time - obs_start).to(u.s).to_string(precision=3)} "
-            + f"to the metafits ({obs_start.mjd}). Using the archive value."
-        )
-        if start_time_offset.to(u.s).value >= 0:
-            start_time_offset = start_time - obs_start
-        else:
-            logger.warning(
-                "The archive start time offset is less than zero."
-                + "Using a starting offset of 0 seconds."
-            )
 
-    if not np.isclose(obs_end.mjd, end_time.mjd, atol=1e-5, rtol=0.0):
-        logger.info(
-            f"End MJD in the archive ({end_time.mjd}) "
-            + f"differs by {(end_time - obs_end).to(u.s).to_string(precision=3)} "
-            + f"to the metafits ({obs_end.mjd}). Using the archive value."
-        )
+    if offset_start is None:
+        start_time_offset = start_time - obs_start
+    else:
+        start_time_offset = offset_start * u.s
+    if offset_end is None:
         end_time_offset = end_time - obs_start
+    else:
+        end_time_offset = offset_end * u.s
 
     results = simulate_sefd(
         metafits,
@@ -309,6 +320,7 @@ def main(
     pre_dict = dict(
         Source=srcname_raw,
         Nbin=cube.num_bin,
+        Phase_rotation=phase_rot,
         Time_frac_flagged=time_flagged,
         BW_frac_flagged=bw_flagged,
     )

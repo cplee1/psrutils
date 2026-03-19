@@ -415,13 +415,13 @@ class SplineProfile(object):
         """
         try:
             assert self._spline_fitted
-        except AssertionError as e:
-            logger.warning(f"Cannot measure pulse widths: Spline has not been fitted.")
+        except AssertionError:
+            logger.warning("Cannot measure pulse widths: Spline has not been fitted.")
             return
         try:
             assert self._maxima
-        except AttributeError as e:
-            logger.warning(f"Cannot measure pulse widths: No profile maxima found.")
+        except AttributeError:
+            logger.warning("Cannot measure pulse widths: No profile maxima found.")
             return
 
         if peak_fracs is None:
