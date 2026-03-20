@@ -80,6 +80,7 @@ def get_bias_corrected_pol_profile(
     if spline:
         profile.fit_spline_gridsearch()
         profile.get_onpulse()
+        profile.correct_baseline()
         sigma_i = float(profile.noise_est)
     else:
         sigma_i = float(profile.offpulse_window_stats()[1])

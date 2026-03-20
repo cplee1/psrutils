@@ -209,6 +209,7 @@ def main(
     profile = SplineProfile(cube.profile / peak_flux)
     profile.fit_spline_gridsearch()
     profile.get_onpulse()
+    profile.correct_baseline()
     if plot_diagnostics:
         profile.plot_diagnostics(
             plot_overestimate=True,

@@ -39,13 +39,20 @@ class SplineProfile(object):
             raise ValueError("profile must be a 1-dimensional array")
 
         self._profile = profile
+        self._baseline_corr: float = 0.0
         self._spline_fitted: bool = False
         self._get_onpulse_attempted: bool = False
+        self._get_onpulse_done: bool = False
 
     @property
     def profile(self) -> NDArray[np.float64]:
         """The pulse profile."""
-        return self._profile
+        return self._profile - self._baseline_corr
+
+    @property
+    def spline_profile(self) -> NDArray[np.float64]:
+        """The smoothed pulse profile."""
+        return self.bspl(self.bins)
 
     @property
     def nbin(self) -> int:
@@ -63,11 +70,16 @@ class SplineProfile(object):
         return self.bins / (self.nbin - 1)
 
     @property
+    def width_eq(self) -> float:
+        """The equivalent pulse width in bins."""
+        return np.sum(self.profile) / np.max(self.profile)
+
+    @property
     def bspl(self) -> BSpline:
         """The spline fit to the pulse profile as a BSPpline object."""
         if not hasattr(self, "_bspl") or self._bspl is None:
             raise AttributeError("Spline has not been fitted.")
-        return self._bspl
+        return lambda x: self._bspl(x) - self._baseline_corr
 
     @property
     def d1_bspl(self) -> BSpline:
@@ -90,7 +102,7 @@ class SplineProfile(object):
         """The spline fit to the pulse profile as a PPoly object."""
         if not hasattr(self, "_ppoly") or self._ppoly is None:
             raise AttributeError("Spline has not been fitted.")
-        return self._ppoly
+        return lambda x: self._ppoly(x) - self._baseline_corr
 
     @property
     def d1_ppoly(self) -> BSpline:
@@ -116,7 +128,7 @@ class SplineProfile(object):
     @property
     def offpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
         """A list of pairs of bins defining the offpulse."""
-        if not self._get_onpulse_attempted:
+        if not self._get_onpulse_done:
             raise AttributeError("Offpulse has not been computed.")
         elif self._offpulse_pairs is None:
             raise AttributeError("Offpulse could not be identified.")
@@ -125,7 +137,7 @@ class SplineProfile(object):
     @property
     def underest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
         """A list of pairs of bins defining the underestimated onpulse."""
-        if not self._get_onpulse_attempted:
+        if not self._get_onpulse_done:
             raise AttributeError("Onpulse has not been computed.")
         elif self._underest_onpulse_pairs is None:
             raise AttributeError("Onpulse could not be identified.")
@@ -134,7 +146,7 @@ class SplineProfile(object):
     @property
     def overest_onpulse_pairs(self) -> list[tuple[np.int_, np.int_]]:
         """A list of pairs of bins defining the overestimated onpulse."""
-        if not self._get_onpulse_attempted:
+        if not self._get_onpulse_done:
             raise AttributeError("Onpulse has not been computed.")
         elif self._overest_onpulse_pairs is None:
             raise AttributeError("Onpulse could not be identified.")
@@ -156,36 +168,40 @@ class SplineProfile(object):
         return get_profile_mask_from_pairs(self.nbin, self.overest_onpulse_pairs)
 
     @property
-    def baseline_est(self) -> None:
-        """An estimation of the profile baseline."""
-        if not self._get_onpulse_attempted or self._offpulse_pairs is None:
-            return self.offpulse_window_stats()[0]
-        else:
-            offpulse = self.profile[self.offpulse_mask]
-            if len(offpulse) < 10:
-                return self.offpulse_window_stats()[0]
-            else:
-                return np.mean(offpulse)
-
-    @property
     def noise_est(self) -> None:
         """An estimation of the noise in the profile."""
         return np.std(self.residuals)
 
     @property
-    def debase_profile(self) -> None:
-        """The baseline-subtracted pulse profile."""
-        return self.profile - self.baseline_est
+    def baseline_est(self) -> None:
+        """An estimation of the profile baseline."""
+        if self._get_onpulse_attempted:
+            if self._get_onpulse_done:
+                if self._offpulse_pairs is None:
+                    # Completed but no offpulse - probably scattered
+                    return self.offpulse_window_stats(self.nbin // 8)[0]
+                else:
+                    # Measured offpulse
+                    offpulse = self.profile[self.offpulse_mask]
+                    if len(offpulse) > self.nbin // 2 and len(self.offpulse_pairs) == 1:
+                        return self.offpulse_window_stats(self.nbin // 2)[0]
+                    elif len(offpulse) > self.nbin // 3:
+                        return self.offpulse_window_stats(self.nbin // 3)[0]
+                    elif len(offpulse) > self.nbin // 4:
+                        return self.offpulse_window_stats(self.nbin // 4)[0]
+                    elif len(offpulse) > self.nbin // 6:
+                        return self.offpulse_window_stats(self.nbin // 6)[0]
+                    else:
+                        return self.offpulse_window_stats(self.nbin // 8)[0]
+            else:
+                # Attempted but failed - probably low S/N
+                return self.offpulse_window_stats(self.nbin // 3)[0]
+        # Otherwise, default to this
+        return self.offpulse_window_stats(self.nbin // 6)[0]
 
-    @property
-    def debase_spline_profile(self) -> None:
-        """The baseline-subtracted smoothed pulse profile."""
-        return self.bspl(self.bins) - self.baseline_est
-
-    @property
-    def width_eq(self) -> float:
-        """The equivalent pulse width in bins."""
-        return np.sum(self.debase_profile) / np.max(self.debase_profile)
+    def correct_baseline(self):
+        """Correct the baseline using the best estimate of the offpulse."""
+        self._baseline_corr = self.baseline_est
 
     def sliding_window(
         self, windowsize: int | None = None, maximise: bool = False
@@ -200,7 +216,7 @@ class SplineProfile(object):
 
         Parameters
         ----------
-        windowsize : int, default: nbin//8
+        windowsize : int, default: nbin // 6
             Window width (in bins) defining the trial regions to integrate.
         maximise : bool, default: False
             Whether to maximise the integral rather than minimise.
@@ -211,7 +227,7 @@ class SplineProfile(object):
             The indices of the leading and trailing edges of the window.
         """
         if windowsize is None:
-            windowsize = self.nbin // 8
+            windowsize = self.nbin // 6
 
         integral = np.zeros(self.nbin)
         for i in range(self.nbin):
@@ -341,6 +357,7 @@ class SplineProfile(object):
         if not self._spline_fitted:
             raise AttributeError("Spline has not been fitted.")
 
+        self._get_onpulse_attempted = True
         std_noise = self.noise_est
 
         # Evaluate the roots of the spline derivatives
@@ -402,7 +419,7 @@ class SplineProfile(object):
         self._offpulse_pairs = offpulse_pairs
         self._maxima = true_maxima
         self._minima = minima
-        self._get_onpulse_attempted = True
+        self._get_onpulse_done = True
 
     def measure_pulse_widths(self, peak_fracs: list[float] | None = None) -> None:
         """Measure the pulse width(s) in bins at a given fraction of the
@@ -437,7 +454,7 @@ class SplineProfile(object):
                 continue
             logger.debug(f"Measuring W{peak_frac * 100:.0f} for S/N={peak_snr:.1f}")
 
-            roots = self.ppoly.solve(peak_frac * peak_flux)
+            roots = self._ppoly.solve(peak_frac * peak_flux + self._baseline_corr)
 
             # Remove out-of-bounds roots
             roots = _get_inbounds_roots(roots, [self.bins[0], self.bins[-1]])
@@ -537,14 +554,12 @@ class SplineProfile(object):
 
         xrange = (0, 1)
         xvalues = self.phases
-        bins_to_x = 1 / self.nbin
+        bins_to_x = 1 / (self.nbin - 1)
 
         # Profile
         axs_prof[0].set_ylabel("Profile")
-        axs_prof[0].plot(
-            xvalues, self.debase_profile, color="k", linewidth=lw, alpha=0.2
-        )
-        axs_prof[0].plot(xvalues, self.debase_spline_profile, color="k", linewidth=lw)
+        axs_prof[0].plot(xvalues, self.profile, color="k", linewidth=lw, alpha=0.2)
+        axs_prof[0].plot(xvalues, self.spline_profile, color="k", linewidth=lw)
 
         # Indicate the standard deviation of the noise
         yrangeProf0 = axs_prof[0].get_ylim()
@@ -569,14 +584,14 @@ class SplineProfile(object):
         axs_prof[2].set_ylabel("Cumulative Sum")
         axs_prof[2].plot(
             xvalues,
-            np.cumsum(self.debase_profile),
+            np.cumsum(self.profile),
             color="k",
             linewidth=lw,
             label="Profile",
         )
         axs_prof[2].plot(
             xvalues,
-            np.cumsum(self.debase_spline_profile),
+            np.cumsum(self.spline_profile),
             color="tab:green",
             linewidth=lw,
             label="Spline",
@@ -666,10 +681,10 @@ class SplineProfile(object):
         if hasattr(self, "_offpulse_pairs") and self._offpulse_pairs is not None:
             mask = get_profile_mask_from_pairs(self.nbin, self.offpulse_pairs)
             if not np.all(np.logical_not(mask)):
-                noff = len(self.debase_profile[mask])
+                noff = len(self.profile[mask])
                 if noff > 3:
-                    mu = np.mean(self.debase_profile[mask])
-                    hb = histogram(self.debase_profile[mask], **hist_kwargs)
+                    mu = np.mean(self.profile[mask])
+                    hb = histogram(self.profile[mask], **hist_kwargs)
                     ax_hists.stairs(*hb, color="k", label="Offpulse", **stairs_kwargs)
                     ax_hists.axvline(mu, color="k", **vline_kwargs)
 
@@ -764,7 +779,7 @@ class SplineProfile(object):
         # Profile
         axT.plot(
             phases_interp,
-            (self.bspl(bins_interp) - self.baseline_est) / self.noise_est,
+            self.bspl(bins_interp) / self.noise_est,
             color="tab:red",
             linewidth=1.8,
             alpha=1,
@@ -772,7 +787,7 @@ class SplineProfile(object):
         )
         axT.plot(
             self.phases,
-            self.debase_profile / self.noise_est,
+            self.profile / self.noise_est,
             color="k",
             linestyle="-",
             linewidth=lw,

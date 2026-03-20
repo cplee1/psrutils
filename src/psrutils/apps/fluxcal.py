@@ -205,6 +205,7 @@ def main(
     # Find the onpulse using the spline method
     profile.fit_spline_gridsearch()
     profile.get_onpulse()
+    profile.correct_baseline()
     if plot_diagnostics:
         profile.plot_diagnostics(
             plot_underestimate=False,

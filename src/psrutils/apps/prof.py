@@ -82,6 +82,7 @@ def main(
     profile = SplineProfile(cube.profile / peak_flux)
     profile.fit_spline_gridsearch()
     profile.get_onpulse()
+    profile.correct_baseline()
 
     if meas_widths:
         peak_fracs = [0.5, 0.1]
@@ -122,7 +123,7 @@ def main(
 
     # Eq 7.1 on pg 167 of Lorimer and Kramer (2012)
     # For pure Gaussian noise, the S/N is invariant under up/down-sampling
-    results["SNR"] = np.sum(profile.debase_profile) / (
+    results["SNR"] = np.sum(profile.profile) / (
         np.std(profile.residuals) * np.sqrt(profile.width_eq)
     )
 
