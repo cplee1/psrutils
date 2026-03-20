@@ -603,6 +603,23 @@ class SplineProfile(object):
             linewidth=lw,
             label="Residuals",
         )
+        u_csum = np.sqrt(np.arange(self.nbin)) * self.noise_est
+        axs_prof[2].fill_between(
+            xvalues,
+            np.cumsum(self.profile) - u_csum,
+            np.cumsum(self.profile) + u_csum,
+            color="k",
+            alpha=0.15,
+            ec="none",
+        )
+        axs_prof[2].fill_between(
+            xvalues,
+            np.cumsum(self.residuals) - np.sqrt(2) * u_csum,
+            np.cumsum(self.residuals) + np.sqrt(2) * u_csum,
+            color="tab:red",
+            alpha=0.15,
+            ec="none",
+        )
         yrangeProf2 = axs_prof[2].get_ylim()
         axs_prof[2].legend(loc="upper left", fontsize=7, frameon=False)
 
