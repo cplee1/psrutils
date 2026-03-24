@@ -215,7 +215,7 @@ def main(
         )
 
     # Normalise the profile so that the noise has a standard deviation of unity
-    snr_profile = profile.debase_profile / profile.noise_est
+    snr_profile = profile.profile / profile.noise_est
 
     # Get pulsar coordinates
     ra_hms, dec_dms = cube.archive.get_coordinates().getHMSDMS().split(" ")
@@ -280,7 +280,7 @@ def main(
     u_stat_S_mean = radiometer_noise / np.sqrt(cube.num_bin)
 
     # Systematic uncertainty due to assumptions in calibration
-    if abs(target_coords.galactic.l.deg) < 10:
+    if abs(target_coords.galactic.b.deg) < 10:
         u_sys_rel = 0.4
     else:
         u_sys_rel = 0.3

@@ -63,7 +63,11 @@ def main(
     cube = StokesCube.from_psrchive(archive, False, 1, 1, bscr, rotate)
     logger.info(f"Number of bins: {cube.num_bin}")
     srcname_raw = cube.source
-    srcname_ltx = cube.source.replace("-", "$-$")
+    # try:
+    #     srcname_raw = jname_to_name(srcname_raw)
+    # except KeyError:
+    #     pass
+    srcname_ltx = srcname_raw.replace("-", "$-$")
     if outfile is None:
         outfile = srcname_raw
 

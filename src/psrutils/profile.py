@@ -177,26 +177,30 @@ class SplineProfile(object):
         """An estimation of the profile baseline."""
         if self._get_onpulse_attempted:
             if self._get_onpulse_done:
-                if self._offpulse_pairs is None:
-                    # Completed but no offpulse - probably scattered
-                    return self.offpulse_window_stats(self.nbin // 8)[0]
+                logger.debug(f"baseline_est: offpulse pairs - {self._offpulse_pairs}")
+                offpulse = self.profile[self.offpulse_mask]
+                if len(self.offpulse_pairs) == 1:
+                    if self.offpulse_pairs[0][0] == self.offpulse_pairs[0][1]:
+                        # No offpulse - probably scattered
+                        logger.debug("baseline_est: scattered")
+                        return self.offpulse_window_stats(self.nbin // 32)[0]
+                # Non-zero length offpulse
+                if len(offpulse) > self.nbin // 2 and len(self.offpulse_pairs) == 1:
+                    return self.offpulse_window_stats(self.nbin // 2)[0]
+                elif len(offpulse) > self.nbin // 3:
+                    return self.offpulse_window_stats(self.nbin // 3)[0]
+                elif len(offpulse) > self.nbin // 4:
+                    return self.offpulse_window_stats(self.nbin // 4)[0]
+                elif len(offpulse) > self.nbin // 6:
+                    return self.offpulse_window_stats(self.nbin // 6)[0]
                 else:
-                    # Measured offpulse
-                    offpulse = self.profile[self.offpulse_mask]
-                    if len(offpulse) > self.nbin // 2 and len(self.offpulse_pairs) == 1:
-                        return self.offpulse_window_stats(self.nbin // 2)[0]
-                    elif len(offpulse) > self.nbin // 3:
-                        return self.offpulse_window_stats(self.nbin // 3)[0]
-                    elif len(offpulse) > self.nbin // 4:
-                        return self.offpulse_window_stats(self.nbin // 4)[0]
-                    elif len(offpulse) > self.nbin // 6:
-                        return self.offpulse_window_stats(self.nbin // 6)[0]
-                    else:
-                        return self.offpulse_window_stats(self.nbin // 8)[0]
+                    return self.offpulse_window_stats(self.nbin // 8)[0]
             else:
                 # Attempted but failed - probably low S/N
+                logger.debug("baseline_est: no identified offpulse")
                 return self.offpulse_window_stats(self.nbin // 3)[0]
         # Otherwise, default to this
+        logger.debug("baseline_est: default")
         return self.offpulse_window_stats(self.nbin // 6)[0]
 
     def correct_baseline(self):
@@ -366,7 +370,7 @@ class SplineProfile(object):
             d2_roots = self.d2_ppoly.roots()
         except ValueError:
             logger.error("Roots of spline could not be found.")
-            return None, None, None, None
+            return
 
         # Remove out-of-bounds roots
         d1_roots = _get_inbounds_roots(d1_roots, [self.bins[0], self.bins[-1]])
@@ -385,7 +389,7 @@ class SplineProfile(object):
 
         if not true_maxima:
             logger.error(f"No profile maxima found above {sigma_cutoff} sigma.")
-            return None, None, None, None
+            return
 
         # The underestimate is defined by the flanking inflections
         underest_onpulse_pairs = _get_flanking_roots(true_maxima, d2_roots)
@@ -409,10 +413,11 @@ class SplineProfile(object):
             [self.bins[0], self.bins[-1]],
         )
 
-        if underest_onpulse_pairs is None or overest_onpulse_pairs is None:
-            offpulse_pairs = None
-        else:
-            offpulse_pairs = invert_bin_pairs(overest_onpulse_pairs)
+        # if underest_onpulse_pairs is None or overest_onpulse_pairs is None:
+        #    logger.debug("Onpulse pairs not found")
+        #    offpulse_pairs = None
+        # else:
+        offpulse_pairs = invert_bin_pairs(overest_onpulse_pairs)
 
         self._underest_onpulse_pairs = underest_onpulse_pairs
         self._overest_onpulse_pairs = overest_onpulse_pairs
@@ -614,8 +619,8 @@ class SplineProfile(object):
         )
         axs_prof[2].fill_between(
             xvalues,
-            np.cumsum(self.residuals) - np.sqrt(2) * u_csum,
-            np.cumsum(self.residuals) + np.sqrt(2) * u_csum,
+            np.cumsum(self.residuals) - u_csum,
+            np.cumsum(self.residuals) + u_csum,
             color="tab:red",
             alpha=0.15,
             ec="none",
