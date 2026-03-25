@@ -203,9 +203,18 @@ class SplineProfile(object):
         logger.debug("baseline_est: default")
         return self.offpulse_window_stats(self.nbin // 6)[0]
 
-    def correct_baseline(self):
-        """Correct the baseline using the best estimate of the offpulse."""
-        self._baseline_corr = self.baseline_est
+    def correct_baseline(self, force_windowsize: int | None = None):
+        """Correct the baseline using the best estimate of the offpulse.
+
+        Parameters
+        ----------
+        force_windowsize : int, default: None
+            Force the sliding window method using this window size.
+        """
+        if type(force_windowsize) is int:
+            self._baseline_corr = self.offpulse_window_stats(force_windowsize)[0]
+        else:
+            self._baseline_corr = self.baseline_est
 
     def sliding_window(
         self, windowsize: int | None = None, maximise: bool = False

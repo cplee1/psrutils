@@ -56,6 +56,13 @@ logger = logging.getLogger(__name__)
 )
 @click.option("-c", "--centre", "centre", is_flag=True, help="Centre the pulse.")
 @click.option(
+    "-w",
+    "--windowsize",
+    "windowsize",
+    type=int,
+    help="The sliding window size to use for baseline estimation.",
+)
+@click.option(
     "--fine_res",
     type=float,
     default=2.0,
@@ -160,6 +167,7 @@ def main(
     archive: str,
     bscrunch: int,
     centre: bool,
+    windowsize: int,
     fine_res: float,
     coarse_res: float,
     min_pbp: float,
@@ -205,7 +213,7 @@ def main(
     # Find the onpulse using the spline method
     profile.fit_spline_gridsearch()
     profile.get_onpulse()
-    profile.correct_baseline()
+    profile.correct_baseline(windowsize)
     if plot_diagnostics:
         profile.plot_diagnostics(
             plot_underestimate=False,

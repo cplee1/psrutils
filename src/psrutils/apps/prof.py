@@ -33,6 +33,12 @@ logger = logging.getLogger(__name__)
 @click.option("-b", "bscr", type=int, help="Bscrunch to this number of phase bins.")
 @click.option("-r", "rotate", type=float, help="Rotate phase by this amount.")
 @click.option("-c", "centre", is_flag=True, help="Centre the pulse.")
+@click.option(
+    "-w",
+    "windowsize",
+    type=int,
+    help="The sliding window size to use for baseline estimation.",
+)
 @click.option("--meas_widths", is_flag=True, help="Measure the pulse width(s).")
 @click.option(
     "--plot_diagnostics", is_flag=True, help="Plot profile fitting diagnostics."
@@ -48,6 +54,7 @@ def main(
     bscr: int,
     rotate: float,
     centre: bool,
+    windowsize: int,
     meas_widths: bool,
     plot_diagnostics: bool,
     plot_publn_prof: bool,
@@ -86,7 +93,7 @@ def main(
     profile = SplineProfile(cube.profile / peak_flux)
     profile.fit_spline_gridsearch()
     profile.get_onpulse()
-    profile.correct_baseline()
+    profile.correct_baseline(windowsize)
 
     if meas_widths:
         peak_fracs = [0.5, 0.1]
