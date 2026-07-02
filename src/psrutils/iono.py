@@ -34,6 +34,11 @@ TELESCOPE_LOCS = {
     "CHIME": EarthLocation(
         lat=49.3208 * u.deg, lon=-119.6236 * u.deg, height=545.0 * u.m
     ),
+    "GMRT": EarthLocation(
+        lat=19.086 * u.deg,
+        lon=74.049 * u.deg,
+        height=0 * u.m,
+    ),
 }
 
 

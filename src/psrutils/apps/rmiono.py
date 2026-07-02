@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 @click.option(
     "-t",
     "telescope",
-    type=click.Choice(["mwa", "chime"], case_sensitive=False),
+    type=click.Choice(["mwa", "chime", "gmrt"], case_sensitive=False),
     default="mwa",
     show_default=True,
     help="The telescope used to collect the observation.",
