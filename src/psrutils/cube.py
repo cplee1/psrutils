@@ -150,7 +150,7 @@ class StokesCube(object):
     @property
     def freqs(self) -> NDArray[np.float_]:
         """NDArray[float]: Subband centre frequencies in MHz."""
-        return self._archive.get_frequencies() * 1e6
+        return self._archive.get_frequencies()
 
     @property
     def lambda_sq(self) -> NDArray[np.float_]:
@@ -310,6 +310,7 @@ class StokesCube(object):
         fscrunch: int | None = None,
         bscrunch: int | None = None,
         rotate_phase: float | None = None,
+        dedisperse: bool = True,
     ):
         """Create a StokesCube from a PSRCHIVE archive object.
 
@@ -327,6 +328,8 @@ class StokesCube(object):
             Average in phase to this number of bins.
         rotate_phase : float or None, default: None
             Rotate in phase by this many rotations.
+        dedisperse : bool, default: True
+            Dedisperse the archive if it is not already.
 
         Returns
         -------
@@ -339,4 +342,6 @@ class StokesCube(object):
 
         archive = cast(Archive, archive)
 
-        return cls(archive, clone, tscrunch, fscrunch, bscrunch, rotate_phase)
+        return cls(
+            archive, clone, tscrunch, fscrunch, bscrunch, rotate_phase, dedisperse
+        )

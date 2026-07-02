@@ -264,7 +264,7 @@ def get_delta_vi(
     delta_vi : NDArray[float64]
         The change in Stokes V/I calculated per bin.
     """
-    freqs = (cube.freqs / 1e6).astype(np.float64)  # MHz
+    freqs = cube.freqs.astype(np.float64)  # MHz
     spectra = cube.subbands.astype(np.float64)  # -> (pol, freq, phase)
     vi_spectra: NDArray[np.float64] = spectra[3] / spectra[0]
     delta_vi = np.full((2, cube.num_bin), np.nan, dtype=np.float64)
