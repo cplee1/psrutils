@@ -18,6 +18,7 @@ from psrutils.misc import pythonise
 from psrutils.polarisation import get_delta_vi
 from psrutils.profile import SplineProfile
 from psrutils.rm import rm_clean, rm_synthesis
+from psrutils.iono import get_rm_iono as get_rm_iono_func
 
 logger = logging.getLogger(__name__)
 
@@ -409,7 +410,7 @@ def main(
     if get_rm_iono:
         setup_logger("spinifex", log_level)
         try:
-            rm_iono, rm_iono_err = get_rm_iono(
+            rm_iono, rm_iono_err = get_rm_iono_func(
                 cube,
                 bootstrap_nsamp=int(1e4),
                 location=telescope,
