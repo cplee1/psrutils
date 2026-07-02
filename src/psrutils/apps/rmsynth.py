@@ -13,12 +13,12 @@ from requests.exceptions import HTTPError
 
 from psrutils import __version__, plotting
 from psrutils.cube import StokesCube
+from psrutils.iono import get_rm_iono as get_rm_iono_func
 from psrutils.logger import log_levels, setup_logger
 from psrutils.misc import pythonise
 from psrutils.polarisation import get_delta_vi
 from psrutils.profile import SplineProfile
 from psrutils.rm import rm_clean, rm_synthesis
-from psrutils.iono import get_rm_iono as get_rm_iono_func
 
 logger = logging.getLogger(__name__)
 
@@ -405,6 +405,7 @@ def main(
             savename=f"{outfile}_pol_profile",
             save_pdf=save_pdf,
             save_data=True,
+            dark_mode=dark_mode,
         )
 
     if get_rm_iono:

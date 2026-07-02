@@ -149,7 +149,7 @@ def _add_pol_profile_to_axes(
             ax_prof.plot(
                 bins,
                 pol_profile.iquv[3] / norm_const + voffset,
-                linestyle=":",
+                linestyle="-.",
                 color=V_colour,
                 zorder=9,
                 **plot_kwargs,
@@ -288,6 +288,7 @@ def plot_pol_profile(
     savename: str = "pol_profile",
     save_pdf: bool = False,
     save_data: bool = False,
+    dark_mode: bool = False,
 ) -> None:
     """Create a plot of integrated flux density vs phase for a specified
     polarisation.
@@ -325,6 +326,8 @@ def plot_pol_profile(
         Save the plot as a pdf?
     save_data : bool, default: False
         Save the plot data?
+    dark_mode : `bool`, optional
+        Use a black background and white lines. Default: `False`.
     """
     valid_rm = False
     if rm_prof_qty is not None:
@@ -389,8 +392,16 @@ def plot_pol_profile(
         ax_prof = fig.add_subplot(gs[1])
 
     # Styles
-    lw = 0.7
-    line_col = "k"
+    lw = 0.6
+    if dark_mode:
+        plt.style.use("dark_background")
+        line_col = "w"
+        L_col = "crimson"
+        V_col = "dodgerblue"
+    else:
+        line_col = "k"
+        L_col = "tab:red"
+        V_col = "tab:blue"
 
     # Phase range to plot
     if phase_range is None:
@@ -408,14 +419,18 @@ def plot_pol_profile(
         plot_v=plot_v,
         p0_cutoff=p0_cutoff,
         bin_func=bin_func,
-        linewidth=lw,
+        I_colour=line_col,
+        L_colour=L_col,
+        V_colour=V_col,
+        PA_colour=line_col,
+        lw=lw,
     )
     # ax_prof.axhline(y=0, color="k", lw=lw, linestyle="--")
 
     lw = 0.7
     caplw = 0.7
     scatter_params = dict(
-        color="k",
+        color=line_col,
         marker="none",
         ms=1,
         linestyle="none",
@@ -780,9 +795,13 @@ def plot_2d_fdf(
     if dark_mode:
         plt.style.use("dark_background")
         line_col = "w"
+        L_col = "crimson"
+        V_col = "dodgerblue"
         cmap_name = "arctic"
     else:
         line_col = "k"
+        L_col = "tab:red"
+        V_col = "tab:blue"
         cmap_name = "arctic_r"
 
     # Define Figure and Axes
@@ -822,6 +841,10 @@ def plot_2d_fdf(
         normalise=False,
         p0_cutoff=p0_cutoff,
         bin_func=bin_func,
+        I_colour=line_col,
+        L_colour=L_col,
+        V_colour=V_col,
+        PA_colour=line_col,
         lw=lw,
     )
     try:
@@ -1138,7 +1161,7 @@ def plot_qu_spectra(
     Q, U : `NDArray`
         The Stokes Q and U samples for each channel.
     freqs : `NDArray`
-        The centre frequencies for each channel in Hz.
+        The centre frequencies for each channel in MHz.
     sigma : `float`, optional
         A value to use to normalise the Q and U spectra. The plot limits will be
         set to k*sigma. If None, then use the standard deviation of Stokes L.
@@ -1153,7 +1176,6 @@ def plot_qu_spectra(
         The name of the plot file excluding the extension.
         Default: 'qu_spectra'.
     """
-    freqs /= 1e6
 
     if sigma is None:
         sigma = np.std(np.sqrt(Q**2 + U**2))
