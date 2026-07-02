@@ -744,9 +744,11 @@ class SplineProfile(object):
             ax_white.set_visible(False)
 
         # Final touches
-        axs_prof[0].set_title(
-            sourcename + "   " + f"$N_\\mathrm{{b}}={self.nbin}$", pad=12
-        )
+        if sourcename is not None:
+            title_prefix = f"{sourcename}   "
+        else:
+            title_prefix = ""
+        axs_prof[0].set_title(title_prefix + f"$N_\\mathrm{{b}}={self.nbin}$", pad=12)
         axs_prof[2].set_xlabel("Pulse Phase")
 
         for ax in list(axs_prof) + [ax_white, ax_hists]:
